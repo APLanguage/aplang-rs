@@ -1,4 +1,7 @@
-use std::{collections::HashMap};
+#![allow(dead_code)]
+
+use std::collections::HashMap;
+use parsing::literals::number::NumberLiteral;
 
 enum Type {
     I32,
@@ -34,17 +37,6 @@ enum Declaration {
     },
 }
 
-enum NumberLiteral {
-    I8(i8),
-    I16(i16),
-    I32(i32),
-    I64(i64),
-    U8(u8),
-    U16(u16),
-    U32(u32),
-    U64(u64),
-    Error(String),
-}
 
 enum Expression {
     Number(NumberLiteral),
@@ -86,6 +78,9 @@ enum Statement {
     ExpressionStatement(Expression),
 }
 
+
+
+pub mod parsing;
 fn main() {
     println!("Hello, world!");
 }
