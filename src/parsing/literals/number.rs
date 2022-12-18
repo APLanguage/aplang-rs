@@ -2,8 +2,8 @@ use std::num::{ParseFloatError, ParseIntError};
 
 use chumsky::{
     prelude::Simple,
-    primitive::{just, choice, empty},
-    text::{ident, int, TextParser, digits},
+    primitive::just,
+    text::{ident, TextParser, digits},
     Parser,
 };
 use lazy_static::lazy_static;
@@ -66,8 +66,8 @@ pub enum LiteralWidth {
     _32 = 32,
     _64 = 64,
 }
-type LiteralWidthResult = Result<LiteralWidth, LiteralWidthError>;
-type NumberLiteralResult = Result<NumberLiteral, NumberLiteralError>;
+pub type LiteralWidthResult = Result<LiteralWidth, LiteralWidthError>;
+pub type NumberLiteralResult = Result<NumberLiteral, NumberLiteralError>;
 
 #[derive(Debug)]
 pub enum NumberLiteralError {
@@ -89,7 +89,7 @@ where
     T::from_str_radix(literal, radix)
 }
 
-pub fn number_parser() -> impl Parser<char, String, Error = Simple<char>> {
+pub fn number_parser() -> impl Parser<char, String, Error = Simple<char>> + Clone {
     // https://github.com/zesterer/chumsky/issues/184
     digits(10)
         .then(ident().or_not())
@@ -99,7 +99,7 @@ pub fn number_parser() -> impl Parser<char, String, Error = Simple<char>> {
         })
 }
 
-pub fn complex_number_parser() -> impl Parser<char, NumberLiteralResult, Error = Simple<char>> {
+pub fn complex_number_parser() -> impl Parser<char, NumberLiteralResult, Error = Simple<char>>  + Clone{
     lazy_static! {
         static ref NUMBER_REGEX: Regex =
             Regex::new(r"^(0x|0b|0o)?(\w+?(?:\.\w+?)*)?(?:([uif])(\d+))?$").unwrap();

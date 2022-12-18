@@ -1,86 +1,23 @@
-#![allow(dead_code)]
+#![allow(dead_code, unused_imports)]
 
-use std::collections::HashMap;
-use parsing::literals::number::NumberLiteral;
-
-enum Type {
-    I32,
-    String,
-    Struct(String),
-    Array(Box<Type>),
-}
-
-enum BinaryOperation {
-    Addition,
-    Substraction,
-    Multiplication,
-    Division,
-}
-
-enum UnaryOperation {
-    Negation,
-}
-
-enum Declaration {
-    Data {
-        name: String,
-        fields: HashMap<String, Type>,
-    },
-    Function {
-        name: String,
-        return_type: Type,
-        parameters: HashMap<String, Type>,
-    },
-    Var {
-        name: String,
-        expression: Option<Box<Expression>>,
-    },
-}
+use chumsky::{Parser, text::{TextParser, newline}, primitive::end};
 
 
-enum Expression {
-    Number(NumberLiteral),
-    String(String),
-    FunctionCall {
-        name: String,
-        parameters: Vec<Expression>,
-    },
-    Binary {
-        lhs: Box<Expression>,
-        op: BinaryOperation,
-        rhs: Box<Expression>,
-    },
-    Unary {
-        op: UnaryOperation,
-        expr: Box<Expression>,
-    },
-    Assignement {
-        lhs: Option<Box<Expression>>,
-        name: String,
-        rhs: Box<Expression>,
-    },
-    If {
-        condition: Box<Expression>,
-        then: Box<Expression>,
-        or: Box<Expression>,
-    },
-}
-
-enum Statement {
-    While {
-        condition: Expression,
-        statement: Option<Box<Statement>>,
-    },
-    If {
-        condition: Expression,
-        statement: Option<Box<Statement>>,
-    },
-    ExpressionStatement(Expression),
-}
+use crate::parsing::{data::data_parser, file::file_parser};
 
 
 
 pub mod parsing;
 fn main() {
-    println!("Hello, world!");
+    let input = "
+    data SomeDude{
+        name: String, age:u32
+    }
+
+    fn test(dude: SomeDude) {
+        1 + 2.smth()
+        println(\"Dude is \" + dude.age + \" years old.\")
+    }
+    ";
+    println!("{:?}", file_parser().padded().then_ignore(end()).parse(input));
 }
