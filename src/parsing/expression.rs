@@ -48,7 +48,7 @@ pub enum Operator {
     Plus,
     #[token("-")]
     Minus,
-    
+
     #[token("/")]
     Slash,
     #[token("//")]
@@ -164,39 +164,41 @@ pub fn expression_parser() -> impl Parser<char, Expression, Error = Simple<char>
         choice((
             if_expr_parser(p.clone()),
             p.clone().delimited_by(just("("), just(")")),
-            term(p),
+            term_parser(p),
         ))
     })
     .labelled("expression")
 }
-
-macro_rules! binary_choice {
+use paste::paste;
+macro_rules! binary_parser {
     ($name: ident, $next_name: ident, $($token: literal), *) => {
-        fn $name<P>(expr_parser: P) -> impl Parser<char, Expression, Error = Simple<char>> + Clone
-        where
-            P: Parser<char, Expression, Error = Simple<char>> + Clone,
-        {
-            math_parser(
-                $next_name(expr_parser.clone()),
-                choice((
-                    $(
-                        just($token),
-                    )*
-                ))
-                    .map(|o| Operator::lexer(&o).next().unwrap_or(Operator::Error))
-                    .padded(),
-                expr_parser,
-            )
-            .labelled(stringify!($name))
+        paste! {
+            fn  [< $name _parser>] <P>(expr_parser: P) -> impl Parser<char, Expression, Error = Simple<char>> + Clone
+            where
+                P: Parser<char, Expression, Error = Simple<char>> + Clone,
+            {
+                math_parser(
+                    [< $next_name _parser>](expr_parser.clone()),
+                    choice((
+                        $(
+                            just($token),
+                        )*
+                    ))
+                        .map(|o| Operator::lexer(&o).next().unwrap_or(Operator::Error))
+                        .padded(),
+                        expr_parser,
+                )
+                .labelled(stringify!($name))
+            }
         }
     };
 }
-binary_choice!(logic, equality, "||", "&&");
-binary_choice!(equality, comparison, "!=", "==");
-binary_choice!(comparison, term, ">=", "<=", ">", "<");
-binary_choice!(term, factor, "+", "-");
-binary_choice!(factor, bitops, "*", "//", "%", "/");
-binary_choice!(bitops, atom_parser, "|", "&", ">>", "<<", ">>>");
+binary_parser!(logic, equality, "||", "&&");
+binary_parser!(equality, comparison, "!=", "==");
+binary_parser!(comparison, term, ">=", "<=", ">", "<");
+binary_parser!(term, factor, "+", "-");
+binary_parser!(factor, bitops, "*", "//", "%", "/");
+binary_parser!(bitops, atom, "|", "&", ">>", "<<", ">>>");
 
 pub fn math_parser<NP, OP, P>(
     next_parser: NP,
