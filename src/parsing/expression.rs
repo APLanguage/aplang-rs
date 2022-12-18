@@ -48,12 +48,50 @@ pub enum Operator {
     Plus,
     #[token("-")]
     Minus,
+    
     #[token("/")]
     Slash,
+    #[token("//")]
+    SlashSlash,
     #[token("*")]
     Asterisk,
     #[token("**")]
     AsteriskAsterisk,
+    #[token("%")]
+    Percent,
+
+    #[token("&")]
+    Ampersand,
+    #[token("|")]
+    Bar,
+    #[token("^")]
+    Circumflex,
+
+    #[token(">>")]
+    GreaterGreater,
+    #[token("<<")]
+    LessLess,
+    #[token(">>>")]
+    GreaterGreaterGreater,
+
+    #[token("&&")]
+    AmpersandAmpersand,
+    #[token("||")]
+    BarBar,
+
+    #[token(">")]
+    Greater,
+    #[token(">=")]
+    GreaterEqual,
+    #[token("<")]
+    Less,
+    #[token("<=")]
+    LessEqual,
+
+    #[token("==")]
+    EqualEqual,
+    #[token("!=")]
+    NotEqual,
 
     #[error]
     Error,
@@ -98,12 +136,10 @@ where
         })
 }
 
-pub fn atom_parser<P>(
-    expr_parser: P,
-) -> impl Parser<char, Expression, Error = Simple<char>> + Clone
+pub fn atom_parser<P>(expr_parser: P) -> impl Parser<char, Expression, Error = Simple<char>> + Clone
 where
     P: Parser<char, Expression, Error = Simple<char>> + Clone,
- {
+{
     choice((
         string_parser().map(Expression::StringLiteral),
         complex_number_parser().map(Expression::Number),
@@ -128,33 +164,53 @@ pub fn expression_parser() -> impl Parser<char, Expression, Error = Simple<char>
         choice((
             if_expr_parser(p.clone()),
             p.clone().delimited_by(just("("), just(")")),
-            math_parser("+-", math_parser("*/", atom_parser(p.clone()), p.clone()), p).labelled("expression"),
+            term(p),
         ))
     })
+    .labelled("expression")
 }
 
-pub fn math_parser<NP, P>(
-    ops: &'static str,
+macro_rules! binary_choice {
+    ($name: ident, $next_name: ident, $($token: literal), *) => {
+        fn $name<P>(expr_parser: P) -> impl Parser<char, Expression, Error = Simple<char>> + Clone
+        where
+            P: Parser<char, Expression, Error = Simple<char>> + Clone,
+        {
+            math_parser(
+                $next_name(expr_parser.clone()),
+                choice((
+                    $(
+                        just($token),
+                    )*
+                ))
+                    .map(|o| Operator::lexer(&o).next().unwrap_or(Operator::Error))
+                    .padded(),
+                expr_parser,
+            )
+            .labelled(stringify!($name))
+        }
+    };
+}
+binary_choice!(logic, equality, "||", "&&");
+binary_choice!(equality, comparison, "!=", "==");
+binary_choice!(comparison, term, ">=", "<=", ">", "<");
+binary_choice!(term, factor, "+", "-");
+binary_choice!(factor, bitops, "*", "//", "%", "/");
+binary_choice!(bitops, atom_parser, "|", "&", ">>", "<<", ">>>");
+
+pub fn math_parser<NP, OP, P>(
     next_parser: NP,
+    operator_parser: OP,
     expr_parser: P,
 ) -> impl Parser<char, Expression, Error = Simple<char>> + Clone
 where
     NP: Parser<char, Expression, Error = Simple<char>> + Clone,
     P: Parser<char, Expression, Error = Simple<char>> + Clone,
+    OP: Parser<char, Operator, Error = Simple<char>> + Clone,
 {
     atom_parser(expr_parser)
         .padded()
-        .then(
-            one_of(ops)
-                .repeated()
-                .at_least(1)
-                .collect::<String>()
-                .map(|o| Operator::lexer(&o).next().unwrap_or(Operator::Error))
-                .padded()
-                .then(next_parser)
-                .repeated()
-                .or_not(),
-        )
+        .then(operator_parser.then(next_parser).repeated().or_not())
         .map(|(atom, chain)| match chain {
             Some(chain) => {
                 if chain.is_empty() {
