@@ -7,9 +7,12 @@ use chumsky::{
 };
 use num_derive::{FromPrimitive, ToPrimitive};
 
-use super::literals::{
-    number::{complex_number_parser, NumberLiteralResult},
-    string::string_parser,
+use super::{
+    literals::{
+        number::{complex_number_parser, NumberLiteralResult},
+        string::string_parser,
+    },
+    utilities::Spanned,
 };
 use logos::Logos;
 
@@ -18,27 +21,27 @@ pub enum Call {
     Identifier(String),
     Call {
         identifier: String,
-        parameters: Vec<Expression>,
+        parameters: Vec<Spanned<Expression>>,
     },
 }
 
 #[derive(Debug)]
 pub enum Expression {
     If {
-        condition: Box<Expression>,
-        then: Box<Expression>,
-        other: Box<Expression>,
+        condition: Box<Spanned<Expression>>,
+        then: Box<Spanned<Expression>>,
+        other: Box<Spanned<Expression>>,
     },
     Number(NumberLiteralResult),
     StringLiteral(String),
     CallChain {
-        expression: Box<Expression>,
-        calls: Vec<Call>,
+        expression: Box<Spanned<Expression>>,
+        calls: Vec<Spanned<Call>>,
     },
     Call(Call),
     Operation {
-        base: Box<Expression>,
-        continuation: Vec<(Operator, Expression)>,
+        base: Box<Spanned<Expression>>,
+        continuation: Vec<(Spanned<Operator>, Spanned<Expression>)>,
     },
 }
 
@@ -104,6 +107,7 @@ where
     ident()
         .then(
             expr_parser
+                .map_with_span(Spanned)
                 .padded()
                 .separated_by(just(","))
                 .allow_trailing()
@@ -126,9 +130,19 @@ where
     EP: Parser<char, Expression, Error = Simple<char>> + Clone,
 {
     just("if")
-        .ignore_then(expr_parser.clone().delimited_by(keyword("("), keyword(")")))
-        .then(expr_parser.clone().padded())
-        .then(keyword("else").padded().ignore_then(expr_parser))
+        .ignore_then(
+            expr_parser
+                .clone()
+                .map_with_span(Spanned)
+                .padded()
+                .delimited_by(keyword("("), keyword(")")),
+        )
+        .then(expr_parser.clone().map_with_span(Spanned).padded())
+        .then(
+            keyword("else")
+                .padded()
+                .ignore_then(expr_parser.map_with_span(Spanned)),
+        )
         .map(|((condition, then), other)| Expression::If {
             condition: Box::new(condition),
             then: Box::new(then),
@@ -145,10 +159,11 @@ where
         complex_number_parser().map(Expression::Number),
         call(expr_parser.clone()).map(Expression::Call),
     ))
-    .then(just(".").ignore_then(call(expr_parser)).repeated())
+    .map_with_span(Spanned)
+    .then(just(".").ignore_then(call(expr_parser).map_with_span(Spanned)).repeated())
     .map(|(expression, calls)| {
         if calls.is_empty() {
-            expression
+            expression.0
         } else {
             Expression::CallChain {
                 expression: Box::new(expression),
@@ -173,12 +188,12 @@ use paste::paste;
 macro_rules! binary_parser {
     ($name: ident, $next_name: ident, $($token: literal), *) => {
         paste! {
-            fn  [< $name _parser>] <P>(expr_parser: P) -> impl Parser<char, Expression, Error = Simple<char>> + Clone
+            fn  [< $name _parser >] <P>(expr_parser: P) -> impl Parser<char, Expression, Error = Simple<char>> + Clone
             where
                 P: Parser<char, Expression, Error = Simple<char>> + Clone,
             {
                 math_parser(
-                    [< $next_name _parser>](expr_parser.clone()),
+                    [< $next_name _parser >](expr_parser.clone()),
                     choice((
                         $(
                             just($token),
@@ -211,20 +226,23 @@ where
     OP: Parser<char, Operator, Error = Simple<char>> + Clone,
 {
     atom_parser(expr_parser)
+        .map_with_span(Spanned)
         .padded()
-        .then(operator_parser.then(next_parser).repeated().or_not())
-        .map(|(atom, chain)| match chain {
-            Some(chain) => {
-                if chain.is_empty() {
-                    atom
-                } else {
-                    Expression::Operation {
-                        base: Box::new(atom),
-                        continuation: chain,
-                    }
+        .then(
+            operator_parser
+                .map_with_span(Spanned)
+                .then(next_parser.map_with_span(Spanned))
+                .repeated(),
+        )
+        .map(|(atom, chain)| {
+            if chain.is_empty() {
+                atom.0 // should think of a better way to handle this
+            } else {
+                Expression::Operation {
+                    base: Box::new(atom),
+                    continuation: chain,
                 }
             }
-            None => atom,
         })
         .padded()
         .labelled("math")
