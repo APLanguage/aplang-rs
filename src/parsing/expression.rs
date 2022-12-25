@@ -16,7 +16,7 @@ use super::{
 };
 use logos::Logos;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum Call {
     Identifier(String),
     Call {
@@ -25,7 +25,7 @@ pub enum Call {
     },
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum Expression {
     If {
         condition: Box<Spanned<Expression>>,

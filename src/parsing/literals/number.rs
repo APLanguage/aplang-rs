@@ -11,14 +11,14 @@ use num_derive::{FromPrimitive, ToPrimitive};
 use num_traits::{cast::FromPrimitive, Num, PrimInt};
 use regex::Regex;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum LiteralWidthError {
     NotSupported(u64),
     TooBig(ParseIntError, String),
     TooBigForLiteral(u64),
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum NumberLiteral {
     Unsigned(u64, LiteralWidth),
     Signed(i64, LiteralWidth),
@@ -41,7 +41,7 @@ impl NumberLiteral {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum LiteralType {
     Unsigned,
     Signed,
@@ -58,7 +58,7 @@ impl LiteralType {
     }
 }
 
-#[derive(Clone, Debug, FromPrimitive, ToPrimitive)]
+#[derive(Clone, Debug, PartialEq, FromPrimitive, ToPrimitive)]
 pub enum LiteralWidth {
     Inferred = 0,
     _8 = 8,
@@ -69,7 +69,7 @@ pub enum LiteralWidth {
 pub type LiteralWidthResult = Result<LiteralWidth, LiteralWidthError>;
 pub type NumberLiteralResult = Result<NumberLiteral, NumberLiteralError>;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum NumberLiteralError {
     ParseInt(ParseIntError, Option<(LiteralType, LiteralWidth)>),
     ParseFloat(ParseFloatError, Option<(LiteralType, LiteralWidth)>),
