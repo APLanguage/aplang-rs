@@ -218,7 +218,6 @@ pub fn complex_number_parser() -> impl Parser<char, NumberLiteralResult, Error =
                 }
             },
         )
-        .padded()
 }
 
 #[cfg(test)]

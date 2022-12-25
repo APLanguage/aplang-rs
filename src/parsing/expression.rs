@@ -158,6 +158,7 @@ where
         string_parser().map(Expression::StringLiteral),
         complex_number_parser().map(Expression::Number),
         call(expr_parser.clone()).map(Expression::Call),
+        expr_parser.clone().delimited_by(just("("), just(")")),
     ))
     .map_with_span(Spanned)
     .then(just(".").ignore_then(call(expr_parser).map_with_span(Spanned)).repeated())
@@ -178,8 +179,7 @@ pub fn expression_parser() -> impl Parser<char, Expression, Error = Simple<char>
     recursive(|p| {
         choice((
             if_expr_parser(p.clone()),
-            p.clone().delimited_by(just("("), just(")")),
-            term_parser(p),
+            logic_parser(p),
         ))
     })
     .labelled("expression")
@@ -200,8 +200,7 @@ macro_rules! binary_parser {
                         )*
                     ))
                         .map(|o| Operator::lexer(&o).next().unwrap_or(Operator::Error))
-                        .padded(),
-                        expr_parser,
+                        .labelled(stringify!([< $next_name _operator >]))
                 )
                 .labelled(stringify!($name))
             }
@@ -215,23 +214,21 @@ binary_parser!(term, factor, "+", "-");
 binary_parser!(factor, bitops, "*", "//", "%", "/");
 binary_parser!(bitops, atom, "|", "&", ">>", "<<", ">>>");
 
-pub fn math_parser<NP, OP, P>(
+pub fn math_parser<NP, OP>(
     next_parser: NP,
-    operator_parser: OP,
-    expr_parser: P,
+    operator_parser: OP
 ) -> impl Parser<char, Expression, Error = Simple<char>> + Clone
 where
     NP: Parser<char, Expression, Error = Simple<char>> + Clone,
-    P: Parser<char, Expression, Error = Simple<char>> + Clone,
     OP: Parser<char, Operator, Error = Simple<char>> + Clone,
 {
-    atom_parser(expr_parser)
+    next_parser.clone()
         .map_with_span(Spanned)
-        .padded()
         .then(
             operator_parser
                 .map_with_span(Spanned)
-                .then(next_parser.map_with_span(Spanned))
+                .padded()
+                .then(next_parser.map_with_span(Spanned).padded())
                 .repeated(),
         )
         .map(|(atom, chain)| {
@@ -244,6 +241,5 @@ where
                 }
             }
         })
-        .padded()
         .labelled("math")
 }

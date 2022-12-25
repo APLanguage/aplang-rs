@@ -6,13 +6,13 @@ use chumsky::{
     Parser,
 };
 
-use crate::parsing::{data::data_parser, file::file_parser};
+use crate::parsing::{data::data_parser, file::file_parser, expression::expression_parser};
 
 pub mod parsing;
 fn main() {
-    let input = "data SomeDude{name:String,age:u32}fn test(dude:SomeDude){1+2.smth()println(\"Dude is \"+dude.age+\" years old.\")1 2 3}";
+    let input = "2 * 5 + 1 *3";
     println!(
         "{:?}",
-        file_parser().padded().then_ignore(end()).parse(input)
+        expression_parser().padded().then_ignore(end()).parse(input)
     );
 }
