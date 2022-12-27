@@ -8,6 +8,7 @@ use chumsky::{
 use super::{
     expression::{expression_parser, Expression},
     statement::Statement,
+    utilities::Spanned,
 };
 
 #[derive(Debug)]
@@ -21,6 +22,8 @@ pub enum ControlFlow {
         condition: Expression,
         statement: Box<Statement>,
     },
+    Return(Option<Spanned<Expression>>),
+    Break,
 }
 
 pub fn if_parser(
@@ -39,7 +42,8 @@ pub fn if_parser(
             condition,
             then: Box::new(then),
             other: other.map(Box::new),
-        }).labelled("if")
+        })
+        .labelled("if")
 }
 
 pub fn while_parser(
@@ -51,11 +55,25 @@ pub fn while_parser(
         .map(|(condition, statement)| ControlFlow::While {
             condition,
             statement: Box::new(statement),
-        }).labelled("while")
+        })
+        .labelled("while")
 }
 
 pub fn control_flow_parser(
     stmt_parser: &(impl Parser<char, Statement, Error = Simple<char>> + Clone),
 ) -> impl Parser<char, ControlFlow, Error = Simple<char>> {
-    choice((if_parser(stmt_parser), while_parser(stmt_parser))).labelled("control-flow")
+    choice((
+        if_parser(stmt_parser),
+        while_parser(stmt_parser),
+        just("break").map(|_| ControlFlow::Break).labelled("break"),
+        return_parser(),
+    ))
+    .labelled("control-flow")
+}
+
+fn return_parser() -> impl Parser<char, ControlFlow, Error = Simple<char>> {
+    just("return")
+            .ignore_then(expression_parser().map_with_span(Spanned).padded().or_not().labelled("return-expr"))
+            .map(ControlFlow::Return)
+            .labelled("return")
 }

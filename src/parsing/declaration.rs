@@ -12,18 +12,24 @@ use chumsky::{
 };
 
 #[derive(Debug)]
+pub struct Function {
+    pub name: String,
+    pub parameters: Vec<(String, ParsedType)>,
+    pub r#type: Option<ParsedType>,
+    pub statements: Vec<Statement>,
+}
+
+#[derive(Debug)]
+pub struct Variable {
+    pub name: String,
+    pub r#type: ParsedType,
+    pub expression: Expression,
+}
+
+#[derive(Debug)]
 pub enum Declaration {
-    Variable {
-        name: String,
-        r#type: ParsedType,
-        expression: Expression,
-    },
-    Function {
-        name: String,
-        parameters: Vec<(String, ParsedType)>,
-        r#type: Option<ParsedType>,
-        statements: Vec<Statement>,
-    },
+    Variable(Variable),
+    Function(Function),
     Data(Data),
 }
 
@@ -34,12 +40,15 @@ pub fn variable_parser() -> impl Parser<char, Declaration, Error = Simple<char>>
         .then(type_parser().padded())
         .then_ignore(keyword("=").padded())
         .then(expression_parser())
-        .map(|((name, r#type), expression)| Declaration::Variable {
-            name,
-            r#type,
-            expression,
+        .map(|((name, r#type), expression)| {
+            Declaration::Variable(Variable {
+                name,
+                r#type,
+                expression,
+            })
         })
-        .padded().labelled("var")
+        .padded()
+        .labelled("var")
 }
 
 fn parameter_parser() -> impl Parser<char, (String, ParsedType), Error = Simple<char>> {
@@ -56,11 +65,13 @@ pub fn function_parser() -> impl Parser<char, Declaration, Error = Simple<char>>
         .then(
             parameter_parser()
                 .separated_by(just(","))
-                .delimited_by(just("("), just(")")).padded()
+                .delimited_by(just("("), just(")"))
+                .padded()
                 .labelled("fn-params"),
         )
         .then(
-            just("->").padded()
+            just("->")
+                .padded()
                 .labelled("fn-arrow")
                 .ignore_then(type_parser().labelled("fn-type"))
                 .or_not(),
@@ -72,13 +83,14 @@ pub fn function_parser() -> impl Parser<char, Declaration, Error = Simple<char>>
                 .delimited_by(just("{"), just("}"))
                 .labelled("fn-stmts"),
         )
-        .map(
-            |(((name, parameters), r#type), statements)| Declaration::Function {
+        .map(|(((name, parameters), r#type), statements)| {
+            Declaration::Function(Function {
                 name,
                 parameters,
                 r#type,
                 statements,
-            },
-        )
-        .padded().labelled("function")
+            })
+        })
+        .padded()
+        .labelled("function")
 }
