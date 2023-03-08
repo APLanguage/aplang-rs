@@ -1,15 +1,14 @@
 use chumsky::{
-    prelude::Simple,
-    primitive::{choice, filter, just},
+    primitive::{choice, just},
     recursive::recursive,
-    text::{keyword, newline, TextParser},
     Parser,
 };
 
 use super::{
     control_flow::{control_flow_parser, ControlFlow},
     declaration::{variable_parser, Declaration},
-    expression::{atom_parser, expression_parser, Expression},
+    expression::{expression_parser, Expression}, tokenizer::{Token, newline,},
+    TokenInput, TokenParser
 };
 
 #[derive(Debug)]
@@ -20,15 +19,14 @@ pub enum Statement {
     None,
 }
 
-pub fn statement_parser() -> impl Parser<char, Statement, Error = Simple<char>> {
+pub fn statement_parser<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, Statement> + Clone {
     recursive(|p| {
         choice((
             variable_parser().map(Statement::Declaration),
-            control_flow_parser(&p).map(Statement::ControlFlow),
+            control_flow_parser(p).map(Statement::ControlFlow),
             expression_parser().map(Statement::Expression),
-            just(";").map(|_| Statement::None),
-        ))
-        .padded()
+            just(Token::Semicolon).map(|_| Statement::None),
+        )).padded_by(newline().repeated())
     })
-    .labelled("statement")
+    // .labelled("statement")
 }

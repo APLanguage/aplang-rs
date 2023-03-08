@@ -1,13 +1,10 @@
-use chumsky::{
-    prelude::Simple,
-    primitive::{choice, just},
-    text::{keyword, TextParser},
-    Parser,
-};
+use chumsky::{prelude::just, primitive::choice, Parser};
 
 use super::{
     expression::{expression_parser, Expression},
     statement::Statement,
+    tokenizer::{keyword, newline, Identifier, Token},
+    TokenInput, TokenParser,
     utilities::Spanned,
 };
 
@@ -26,16 +23,18 @@ pub enum ControlFlow {
     Break,
 }
 
-pub fn if_parser(
-    stmt_parser: &(impl Parser<char, Statement, Error = Simple<char>> + Clone),
-) -> impl Parser<char, ControlFlow, Error = Simple<char>> {
-    just("if")
-        .ignore_then(expression_parser().delimited_by(just("("), just(")")))
-        .then(stmt_parser.clone().padded())
+pub fn if_parser<'a, I: TokenInput<'a>>(
+    stmt_parser: impl TokenParser<'a, I, Statement> + Clone,
+) -> impl TokenParser<'a, I, ControlFlow> + Clone {
+    keyword(Identifier::If)
+        .ignore_then(
+            expression_parser().delimited_by(just(Token::ParenOpen), just(Token::ParenClosed)),
+        )
+        .then(stmt_parser.clone().padded_by(newline().repeated()))
         .then(
-            keyword("else")
-                .padded()
-                .ignore_then(stmt_parser.clone())
+            keyword(Identifier::Else)
+                .padded_by(newline().repeated())
+                .ignore_then(stmt_parser)
                 .or_not(),
         )
         .map(|((condition, then), other)| ControlFlow::If {
@@ -43,37 +42,44 @@ pub fn if_parser(
             then: Box::new(then),
             other: other.map(Box::new),
         })
-        .labelled("if")
+    /* .labelled("if") */
 }
 
-pub fn while_parser(
-    stmt_parser: &(impl Parser<char, Statement, Error = Simple<char>> + Clone),
-) -> impl Parser<char, ControlFlow, Error = Simple<char>> {
-    just("while")
-        .ignore_then(expression_parser().delimited_by(just("("), just(")")))
-        .then(stmt_parser.clone().padded())
+pub fn while_parser<'a, I: TokenInput<'a>>(
+    stmt_parser: impl TokenParser<'a, I, Statement> + Clone,
+) -> impl TokenParser<'a, I, ControlFlow> + Clone {
+    keyword(Identifier::While)
+        .ignore_then(
+            expression_parser().delimited_by(just(Token::ParenOpen), just(Token::ParenClosed)),
+        )
+        .then(stmt_parser.padded_by(newline().repeated()))
         .map(|(condition, statement)| ControlFlow::While {
             condition,
             statement: Box::new(statement),
         })
-        .labelled("while")
+    /* .labelled("while") */
 }
 
-pub fn control_flow_parser(
-    stmt_parser: &(impl Parser<char, Statement, Error = Simple<char>> + Clone),
-) -> impl Parser<char, ControlFlow, Error = Simple<char>> {
+pub fn control_flow_parser<'a, I: TokenInput<'a>>(
+    stmt_parser: impl TokenParser<'a, I, Statement> + Clone,
+) -> impl TokenParser<'a, I, ControlFlow> + Clone {
     choice((
-        if_parser(stmt_parser),
+        if_parser(stmt_parser.clone()),
         while_parser(stmt_parser),
-        just("break").map(|_| ControlFlow::Break).labelled("break"),
+        keyword(Identifier::Break).map(|_| ControlFlow::Break), /* .labelled("break") */
         return_parser(),
     ))
-    .labelled("control-flow")
+    /* .labelled("control-flow") */
 }
 
-fn return_parser() -> impl Parser<char, ControlFlow, Error = Simple<char>> {
-    just("return")
-            .ignore_then(expression_parser().map_with_span(Spanned).padded().or_not().labelled("return-expr"))
-            .map(ControlFlow::Return)
-            .labelled("return")
+fn return_parser<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, ControlFlow> + Clone {
+    keyword(Identifier::Return)
+        .ignore_then(
+            expression_parser()
+                .map_with_span(Spanned)
+                .padded_by(newline().repeated())
+                .or_not(), /* .labelled("return-expr") */
+        )
+        .map(ControlFlow::Return)
+    /* .labelled("return") */
 }

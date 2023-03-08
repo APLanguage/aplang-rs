@@ -1,15 +1,18 @@
-use chumsky::{prelude::Simple, primitive::choice, Parser};
+use chumsky::{primitive::choice, Parser, IterParser};
 
 use super::{
-    data::data_parser,
-    declaration::{function_parser, variable_parser, Declaration},
+    data::struct_parser,
+    declaration::{function_parser, variable_parser, Declaration}, tokenizer::newline,
+    TokenInput, TokenParser
 };
 
-pub fn file_parser() -> impl Parser<char, Vec<Declaration>, Error = Simple<char>> {
+pub fn file_parser<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, Vec<Declaration>> {
     choice((
-        data_parser().map(Declaration::Data),
+        struct_parser().map(Declaration::Struct),
         variable_parser(),
         function_parser(),
     ))
+    .padded_by(newline().repeated())
     .repeated()
+    .collect()
 }

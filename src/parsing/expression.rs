@@ -1,27 +1,25 @@
 use chumsky::{
-    prelude::Simple,
-    primitive::{choice, just, one_of},
+    primitive::{choice, just},
     recursive::recursive,
-    text::{ident, keyword, TextParser},
-    Parser,
+    span::SimpleSpan,
+    IterParser, Parser,
 };
-use num_derive::{FromPrimitive, ToPrimitive};
+
+use crate::parsing::tokenizer::Identifier;
 
 use super::{
-    literals::{
-        number::{complex_number_parser, NumberLiteralResult},
-        string::string_parser,
-    },
+    literals::number::{parse_complex_number, NumberLiteralResult},
+    tokenizer::{ident, keyword, newline, Operation, Token},
     utilities::Spanned,
+    ParserState, TokenInput, TokenParser,
 };
-use logos::Logos;
 
 #[derive(Debug, PartialEq)]
 pub enum Call {
-    Identifier(String),
+    Identifier(Spanned<Identifier>),
     Call {
-        identifier: String,
-        parameters: Vec<Spanned<Expression>>,
+        identifier: Spanned<Identifier>,
+        parameters: Box<[Spanned<Expression>]>,
     },
 }
 
@@ -36,83 +34,44 @@ pub enum Expression {
     StringLiteral(String),
     CallChain {
         expression: Box<Spanned<Expression>>,
-        calls: Vec<Spanned<Call>>,
+        calls: Box<[Spanned<Call>]>,
     },
     Call(Call),
     Operation {
         base: Box<Spanned<Expression>>,
-        continuation: Vec<(Spanned<Operator>, Spanned<Expression>)>,
+        continuation: Box<[(Spanned<Operation>, Spanned<Expression>)]>,
+    },
+    Assignement {
+        call: Spanned<Call>,
+        op: Spanned<Operation>,
+        expression: Box<Spanned<Expression>>,
     },
 }
 
-#[derive(Logos, Debug, PartialEq, ToPrimitive, FromPrimitive)]
-pub enum Operator {
-    #[token("+")]
-    Plus,
-    #[token("-")]
-    Minus,
-
-    #[token("/")]
-    Slash,
-    #[token("//")]
-    SlashSlash,
-    #[token("*")]
-    Asterisk,
-    #[token("**")]
-    AsteriskAsterisk,
-    #[token("%")]
-    Percent,
-
-    #[token("&")]
-    Ampersand,
-    #[token("|")]
-    Bar,
-    #[token("^")]
-    Circumflex,
-
-    #[token(">>")]
-    GreaterGreater,
-    #[token("<<")]
-    LessLess,
-    #[token(">>>")]
-    GreaterGreaterGreater,
-
-    #[token("&&")]
-    AmpersandAmpersand,
-    #[token("||")]
-    BarBar,
-
-    #[token(">")]
-    Greater,
-    #[token(">=")]
-    GreaterEqual,
-    #[token("<")]
-    Less,
-    #[token("<=")]
-    LessEqual,
-
-    #[token("==")]
-    EqualEqual,
-    #[token("!=")]
-    NotEqual,
-
-    #[error]
-    Error,
+macro_rules! ops_parser {
+    ($($variant:ident), *) => {
+        choice((
+            $(
+                just(Token::$variant).map(|tk| Into::<Operation>::into(tk)),
+            )*
+        ))
+    };
 }
 
-fn call<EP>(expr_parser: EP) -> impl Parser<char, Call, Error = Simple<char>> + Clone
-where
-    EP: Parser<char, Expression, Error = Simple<char>> + Clone,
-{
+fn call<'a, EP, I: TokenInput<'a>>(expr_parser: EP) -> impl TokenParser<'a, I, Call> + Clone
+where EP: TokenParser<'a, I, Expression> + Clone {
     ident()
+        .map_with_span(Spanned)
         .then(
             expr_parser
                 .map_with_span(Spanned)
-                .padded()
-                .separated_by(just(","))
+                .padded_by(newline().repeated())
+                .separated_by(just(Token::Comma))
                 .allow_trailing()
                 .at_least(0)
-                .delimited_by(just("("), just(")"))
+                .collect()
+                .map(Vec::into_boxed_slice)
+                .delimited_by(just(Token::ParenOpen), just(Token::ParenClosed))
                 .or_not(),
         )
         .map(|(identifier, params)| match params {
@@ -122,25 +81,68 @@ where
             },
             None => Call::Identifier(identifier),
         })
-        .labelled("call")
+    /* .labelled("call") */
 }
 
-fn if_expr_parser<EP>(expr_parser: EP) -> impl Parser<char, Expression, Error = Simple<char>>
-where
-    EP: Parser<char, Expression, Error = Simple<char>> + Clone,
-{
-    just("if")
+fn assignment<'a, EP, I: TokenInput<'a>>(
+    expr_parser: EP,
+) -> impl TokenParser<'a, I, Expression> + Clone
+where EP: TokenParser<'a, I, Expression> + Clone {
+    call(expr_parser.clone())
+        .map_with_span(Spanned)
+        /* .labelled("assignement_left") */
+        .then(
+            ops_parser!(
+                PlusEqual,
+                MinusEqual,
+                SlashSlashEqual,
+                SlashEqual,
+                AsteriskAsteriskEqual,
+                AsteriskEqual,
+                PercentEqual,
+                AmpersandEqual,
+                BarEqual,
+                CircumflexEqual,
+                GreaterGreaterGreaterEqual,
+                GreaterGreaterEqual,
+                LessLessEqual
+            )
+            .map_with_span(Spanned)
+            /* .labelled("assignement_operator") */
+            .padded_by(newline().repeated())
+            .then(
+                expr_parser.map_with_span(Spanned), /* .labelled("assignement_right") */
+            ),
+        )
+        .map(|(call, (op, expression))| Expression::Assignement {
+            call,
+            op,
+            expression: Box::new(expression),
+        })
+    /* .labelled("assignement") */
+}
+
+fn if_expr_parser<'a, EP, I: TokenInput<'a>>(
+    expr_parser: EP,
+) -> impl TokenParser<'a, I, Expression> + Clone
+where EP: TokenParser<'a, I, Expression> + Clone {
+    keyword(Identifier::If)
         .ignore_then(
             expr_parser
                 .clone()
                 .map_with_span(Spanned)
-                .padded()
-                .delimited_by(keyword("("), keyword(")")),
+                .padded_by(newline().repeated())
+                .delimited_by(just(Token::ParenOpen), just(Token::ParenClosed)),
         )
-        .then(expr_parser.clone().map_with_span(Spanned).padded())
         .then(
-            keyword("else")
-                .padded()
+            expr_parser
+                .clone()
+                .map_with_span(Spanned)
+                .padded_by(newline().repeated()),
+        )
+        .then(
+            keyword(Identifier::Else)
+                .padded_by(newline().repeated())
                 .ignore_then(expr_parser.map_with_span(Spanned)),
         )
         .map(|((condition, then), other)| Expression::If {
@@ -150,18 +152,30 @@ where
         })
 }
 
-pub fn atom_parser<P>(expr_parser: P) -> impl Parser<char, Expression, Error = Simple<char>> + Clone
-where
-    P: Parser<char, Expression, Error = Simple<char>> + Clone,
-{
+pub fn atom_parser<'a, EP, I: TokenInput<'a>>(
+    expr_parser: EP,
+) -> impl TokenParser<'a, I, Expression> + Clone
+where EP: TokenParser<'a, I, Expression> + Clone {
     choice((
-        string_parser().map(Expression::StringLiteral),
-        complex_number_parser().map(Expression::Number),
+        // string_parser().map(Expression::StringLiteral), TODO: string & number
+        just(Token::Number)
+            .map_with_state(|_, span: SimpleSpan, input: &mut ParserState| {
+                parse_complex_number(input.slice(span.into()))
+            })
+            .map(Expression::Number),
         call(expr_parser.clone()).map(Expression::Call),
-        expr_parser.clone().delimited_by(just("("), just(")")),
+        expr_parser
+            .clone()
+            .delimited_by(just(Token::ParenOpen), just(Token::ParenClosed)),
     ))
     .map_with_span(Spanned)
-    .then(just(".").ignore_then(call(expr_parser).map_with_span(Spanned)).repeated())
+    .then(
+        just(Token::Dot)
+            .ignore_then(call(expr_parser).map_with_span(Spanned))
+            .repeated()
+            .collect::<Vec<_>>()
+            .map(Vec::into_boxed_slice),
+    )
     .map(|(expression, calls)| {
         if calls.is_empty() {
             expression.0
@@ -172,64 +186,86 @@ where
             }
         }
     })
-    .labelled("atom")
+    /* .labelled("atom") */
 }
 
-pub fn expression_parser() -> impl Parser<char, Expression, Error = Simple<char>> + Clone {
+pub fn expression_parser<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, Expression> + Clone {
     recursive(|p| {
         choice((
             if_expr_parser(p.clone()),
+            assignment(p.clone()),
             logic_parser(p),
         ))
     })
-    .labelled("expression")
+    /* .labelled("expression") */
 }
+
 use paste::paste;
 macro_rules! binary_parser {
-    ($name: ident, $next_name: ident, $($token: literal), *) => {
+    ($name: ident, $next_name: ident, $ops:expr) => {
         paste! {
-            fn  [< $name _parser >] <P>(expr_parser: P) -> impl Parser<char, Expression, Error = Simple<char>> + Clone
+            fn  [< $name _parser >] <'a, EP, I: TokenInput<'a>>(expr_parser: EP) -> impl TokenParser<'a, I, Expression> + Clone
             where
-                P: Parser<char, Expression, Error = Simple<char>> + Clone,
+                EP: TokenParser<'a, I, Expression> + Clone,
             {
                 math_parser(
                     [< $next_name _parser >](expr_parser.clone()),
-                    choice((
-                        $(
-                            just($token),
-                        )*
-                    ))
-                        .map(|o| Operator::lexer(&o).next().unwrap_or(Operator::Error))
-                        .labelled(stringify!([< $next_name _operator >]))
+                    $ops/* .labelled(stringify!([< $name _operator >])) */
                 )
-                .labelled(stringify!($name))
+                /* .labelled(stringify!($name)) */
             }
         }
     };
 }
-binary_parser!(logic, equality, "||", "&&");
-binary_parser!(equality, comparison, "!=", "==");
-binary_parser!(comparison, term, ">=", "<=", ">", "<");
-binary_parser!(term, factor, "+", "-");
-binary_parser!(factor, bitops, "*", "//", "%", "/");
-binary_parser!(bitops, atom, "|", "&", ">>", "<<", ">>>");
 
-pub fn math_parser<NP, OP>(
+binary_parser!(logic, equality, ops_parser!(BarBar, AmpersandAmpersand));
+binary_parser!(equality, comparison, ops_parser!(BangEqual, EqualEqual));
+binary_parser!(
+    comparison,
+    term,
+    ops_parser!(GreaterEqual, LessEqual, Greater, Less)
+);
+binary_parser!(term, factor, ops_parser!(Plus, Minus)); // TODO: Newline split
+binary_parser!(
+    factor,
+    bitops,
+    ops_parser!(Asterisk, SlashSlash, Percent, Slash)
+);
+binary_parser!(
+    bitops,
+    atom,
+    ops_parser!(
+        Bar,
+        Ampersand,
+        GreaterGreater,
+        LessLess,
+        GreaterGreaterGreater
+    )
+);
+
+pub fn math_parser<'a, NP, OP, I: TokenInput<'a>>(
     next_parser: NP,
-    operator_parser: OP
-) -> impl Parser<char, Expression, Error = Simple<char>> + Clone
+    operator_parser: OP,
+) -> impl TokenParser<'a, I, Expression> + Clone
 where
-    NP: Parser<char, Expression, Error = Simple<char>> + Clone,
-    OP: Parser<char, Operator, Error = Simple<char>> + Clone,
+    NP: TokenParser<'a, I, Expression> + Clone,
+    OP: TokenParser<'a, I, Operation> + Clone,
 {
-    next_parser.clone()
+    next_parser
+        .clone()
         .map_with_span(Spanned)
         .then(
             operator_parser
                 .map_with_span(Spanned)
-                .padded()
-                .then(next_parser.map_with_span(Spanned).padded())
-                .repeated(),
+                .padded_by(newline().repeated())
+                .then(
+                    next_parser
+                        .map_with_span(Spanned)
+                        .padded_by(newline().repeated()),
+                )
+                .repeated()
+                .collect::<Vec<_>>()
+                .map(Vec::into_boxed_slice),
         )
         .map(|(atom, chain)| {
             if chain.is_empty() {
@@ -241,5 +277,5 @@ where
                 }
             }
         })
-        .labelled("math")
+    /* .labelled("math") */
 }

@@ -1,24 +1,19 @@
-use std::num::{ParseFloatError, ParseIntError};
-
-use chumsky::{
-    prelude::Simple,
-    primitive::just,
-    text::{ident, TextParser, digits},
-    Parser,
+use std::{
+    num::{ParseFloatError, ParseIntError},
+    sync::OnceLock,
 };
-use lazy_static::lazy_static;
-use num_derive::{FromPrimitive, ToPrimitive};
-use num_traits::{cast::FromPrimitive, Num, PrimInt};
+
+use num_traits::{Num, PrimInt};
 use regex::Regex;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum LiteralWidthError {
     NotSupported(u64),
     TooBig(ParseIntError, String),
     TooBigForLiteral(u64),
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum NumberLiteral {
     Unsigned(u64, LiteralWidth),
     Signed(i64, LiteralWidth),
@@ -41,7 +36,7 @@ impl NumberLiteral {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum LiteralType {
     Unsigned,
     Signed,
@@ -58,7 +53,8 @@ impl LiteralType {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, FromPrimitive, ToPrimitive)]
+#[derive(Clone, Debug, PartialEq)]
+#[repr(u8)]
 pub enum LiteralWidth {
     Inferred = 0,
     _8 = 8,
@@ -66,10 +62,34 @@ pub enum LiteralWidth {
     _32 = 32,
     _64 = 64,
 }
+
+impl TryFrom<u8> for LiteralWidth {
+    type Error = LiteralWidthError;
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        LiteralWidth::try_from(Into::<u64>::into(value))
+    }
+}
+
+impl TryFrom<u64> for LiteralWidth {
+    type Error = LiteralWidthError;
+
+    fn try_from(value: u64) -> Result<Self, Self::Error> {
+        Ok(match value {
+            0 => LiteralWidth::Inferred,
+            8 => LiteralWidth::_8,
+            16 => LiteralWidth::_16,
+            32 => LiteralWidth::_32,
+            64 => LiteralWidth::_64,
+            other => return Err(LiteralWidthError::NotSupported(other)),
+        })
+    }
+}
+
 pub type LiteralWidthResult = Result<LiteralWidth, LiteralWidthError>;
 pub type NumberLiteralResult = Result<NumberLiteral, NumberLiteralError>;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum NumberLiteralError {
     ParseInt(ParseIntError, Option<(LiteralType, LiteralWidth)>),
     ParseFloat(ParseFloatError, Option<(LiteralType, LiteralWidth)>),
@@ -79,192 +99,110 @@ pub enum NumberLiteralError {
     FloatHasRadix,
     CannotInfer,
     UnknownSuffix(String),
+    Error,
 }
 
 #[inline]
 fn parse_number<T>(literal: &str, radix: u32) -> Result<T, <T as Num>::FromStrRadixErr>
-where
-    T: PrimInt,
-{
+where T: PrimInt {
     T::from_str_radix(literal, radix)
 }
 
-pub fn number_parser() -> impl Parser<char, String, Error = Simple<char>> + Clone {
-    // https://github.com/zesterer/chumsky/issues/184
-    digits(10)
-        .then(ident().or_not())
-        .map(|(tail, head): (String, Option<String>)| match head {
-            Some(head) => tail + &head,
-            None => tail,
-        })
-}
+static NUMBER_REGEX: OnceLock<Regex> = OnceLock::new();
 
-pub fn complex_number_parser() -> impl Parser<char, NumberLiteralResult, Error = Simple<char>>  + Clone{
-    lazy_static! {
-        static ref NUMBER_REGEX: Regex =
-            Regex::new(r"^(0x|0b|0o)?(\w+?(?:\.\w+?)*)?(?:([uif])(\d+))?$").unwrap();
-    }
-
-    let nb_psr = number_parser()
-        .separated_by(just("."))
-        .at_least(1)
-        .map(|v| v.join("."));
-    just("-")
-        .repeated()
-        .map(|v| (v.len() & 1 == 1, !v.is_empty()))
-        .then(nb_psr.map(|value| {
-            let Some(captures) = NUMBER_REGEX.captures(&value) else {
-                return (10, "wtf".to_owned(), None);
+pub fn parse_complex_number(input: &str) -> NumberLiteralResult {
+    let Some(captures) = NUMBER_REGEX.get_or_init(|| {
+                Regex::new(r"^(0x|0b|0o)?(\w+?(?:\.\w+?)*)?(?:([uif])(\d+))?$").unwrap()
+            }).captures(input) else {
+                return Err(NumberLiteralError::Error);
             };
-            let value = captures.get(2).map(|m| m.as_str().to_owned());
-            let radix = captures
-                .get(1)
-                .map(|m| match m.as_str() {
-                    "0x" => 16,
-                    "0b" => 2,
-                    "0o" => 8,
-                    _ => unimplemented!(),
-                })
-                .unwrap_or(10);
-            let value = value.unwrap_or_else(|| captures.get(1).unwrap().as_str().to_owned());
+    let value = captures.get(2).map(|m| m.as_str().to_owned());
+    let radix = captures
+        .get(1)
+        .map(|m| match m.as_str() {
+            "0x" => 16,
+            "0b" => 2,
+            "0o" => 8,
+            _ => unimplemented!(),
+        })
+        .unwrap_or(10);
+    let value = value.unwrap_or_else(|| captures.get(1).unwrap().as_str().to_owned());
+    let num_type_width = captures
+        .get(3)
+        .map(|m| m.as_str())
+        .map(|nt| match nt {
+            "u" => LiteralType::Unsigned,
+            "i" => LiteralType::Signed,
+            "f" => LiteralType::Float,
+            _ => unreachable!(),
+        })
+        .map(|lt| {
             (
-                radix,
-                value,
+                lt,
                 captures
-                    .get(3)
+                    .get(4)
                     .map(|m| m.as_str())
-                    .map(|nt| match nt {
-                        "u" => LiteralType::Unsigned,
-                        "i" => LiteralType::Signed,
-                        "f" => LiteralType::Float,
-                        _ => unreachable!(),
-                    })
-                    .map(|lt| {
-                        (
-                            lt,
-                            captures
-                                .get(4)
-                                .map(|m| m.as_str())
-                                .map(|w| w.parse::<u64>().unwrap())
-                                .unwrap(),
-                        )
-                    }),
+                    .map(|w| w.parse::<u64>().unwrap())
+                    .unwrap(),
             )
-        }))
-        .map(
-            |((is_negative, has_minus), (radix, value, num_type_width))| {
-                let mut number_part = value.replace('_', "");
-                if is_negative {
-                    number_part = "-".to_owned() + &number_part
-                }
-                if num_type_width.is_none() {
-                    let unsigned = if !has_minus {
-                        parse_number::<u64>(&number_part, radix).ok()
-                    } else {
-                        None
-                    };
-                    let signed = parse_number::<i64>(&number_part, radix).ok();
-                    let float = if radix == 10 {
-                        number_part.parse::<f64>().ok()
-                    } else {
-                        None
-                    };
-                    return match (unsigned.is_some() as u8)
-                        + (signed.is_some() as u8)
-                        + (float.is_some() as u8)
-                    {
-                        0 => Err(NumberLiteralError::CannotInfer),
-                        1 => Ok(unsigned
-                            .map(NumberLiteral::inferred_of_u64)
-                            .or_else(|| signed.map(NumberLiteral::inferred_of_i64))
-                            .or_else(|| float.map(NumberLiteral::inferred_of_f64))
-                            .unwrap()),
-                        _ => Ok(NumberLiteral::Inferred {
-                            unsigned,
-                            signed,
-                            float,
-                        }),
-                    };
-                };
-                let (num_type, width) = num_type_width.unwrap();
-                let width = match LiteralWidth::from_u64(width).ok_or(width) {
-                    Ok(w) => w,
-                    Err(w) => {
-                        return Err(num_type.width_error()(LiteralWidthError::NotSupported(w)))
-                    }
-                };
-                use LiteralType::*;
-                match num_type {
-                    Unsigned => match parse_number(&number_part, radix) {
-                        Ok(v) => Ok(NumberLiteral::Unsigned(v, width)),
-                        Err(e) => Err(NumberLiteralError::ParseInt(e, Some((Unsigned, width)))),
-                    },
-                    Signed => match parse_number(&number_part, radix) {
-                        Ok(v) => Ok(NumberLiteral::Signed(v, width)),
-                        Err(e) => Err(NumberLiteralError::ParseInt(e, Some((Signed, width)))),
-                    },
-                    Float => {
-                        if radix != 10 {
-                            Err(NumberLiteralError::FloatHasRadix)
-                        } else {
-                            match number_part.parse::<f64>() {
-                                Ok(v) => Ok(NumberLiteral::Float(v, width)),
-                                Err(e) => {
-                                    Err(NumberLiteralError::ParseFloat(e, Some((Float, width))))
-                                }
-                            }
-                        }
-                    }
-                }
-            },
-        )
-}
+        });
+    // ((is_negative, has_minus), (radix, value, num_type_width))
+    // for the time being, the negative part could be handled with this parser later
+    let is_negative = false;
+    let has_minus = false;
 
-#[cfg(test)]
-mod tests {
-    use super::complex_number_parser;
-    use chumsky::Parser;
-
-    #[test]
-    fn testoo() {
-        let parser = complex_number_parser();
-        let v: Vec<&str> = vec![
-            "_123i32",
-            "a__auab",
-            "0b",
-            "0x",
-            "0X",
-            "0xi16",
-            "",
-            "132i64",
-            "0x123u64",
-            "0babcdefi64",
-            "0b01010u64",
-            "0xabc_defu32",
-            "4141i8",
-            "-1i32",
-            "0i16",
-            "0",
-            "-1",
-            "00",
-            "1",
-            "-0012",
-            "--12",
-            "01",
-            "12",
-            "0x0",
-            "1.0",
-            "13.0f64",
-            "564f64",
-            "1.6_54_6",
-            "-0x2130",
-            "9223372036854775808i64",
-            "-9223372036854775808i64",
-            "123.0213",
-            "13.0123.32"
-        ];
-        for ele in v {
-            println!("{} -> {:?}", ele, parser.parse(ele))
+    let mut number_part = value.replace('_', "");
+    if is_negative {
+        number_part = "-".to_owned() + &number_part
+    }
+    if num_type_width.is_none() {
+        let unsigned = if !has_minus {
+            parse_number::<u64>(&number_part, radix).ok()
+        } else {
+            None
+        };
+        let signed = parse_number::<i64>(&number_part, radix).ok();
+        let float = if radix == 10 {
+            number_part.parse::<f64>().ok()
+        } else {
+            None
+        };
+        return match (unsigned.is_some() as u8) + (signed.is_some() as u8) + (float.is_some() as u8)
+        {
+            0 => Err(NumberLiteralError::CannotInfer),
+            1 => Ok(unsigned
+                .map(NumberLiteral::inferred_of_u64)
+                .or_else(|| signed.map(NumberLiteral::inferred_of_i64))
+                .or_else(|| float.map(NumberLiteral::inferred_of_f64))
+                .unwrap()),
+            _ => Ok(NumberLiteral::Inferred {
+                unsigned,
+                signed,
+                float,
+            }),
+        };
+    };
+    let (num_type, width) = num_type_width.unwrap();
+    let width = LiteralWidth::try_from(width).map_err(num_type.width_error())?;
+    use LiteralType::*;
+    match num_type {
+        Unsigned => match parse_number(&number_part, radix) {
+            Ok(v) => Ok(NumberLiteral::Unsigned(v, width)),
+            Err(e) => Err(NumberLiteralError::ParseInt(e, Some((Unsigned, width)))),
+        },
+        Signed => match parse_number(&number_part, radix) {
+            Ok(v) => Ok(NumberLiteral::Signed(v, width)),
+            Err(e) => Err(NumberLiteralError::ParseInt(e, Some((Signed, width)))),
+        },
+        Float => {
+            if radix != 10 {
+                Err(NumberLiteralError::FloatHasRadix)
+            } else {
+                match number_part.parse::<f64>() {
+                    Ok(v) => Ok(NumberLiteral::Float(v, width)),
+                    Err(e) => Err(NumberLiteralError::ParseFloat(e, Some((Float, width)))),
+                }
+            }
         }
     }
 }

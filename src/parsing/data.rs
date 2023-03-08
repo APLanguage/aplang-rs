@@ -1,40 +1,64 @@
 use chumsky::{
-    prelude::Simple,
-    primitive::just,
-    text::{ident, keyword, TextParser},
-    Parser,
+    primitive::{just, choice},
+    Parser, recursive::recursive, IterParser,
 };
+
+use super::{
+    utilities::Spanned,
+    tokenizer::{ident, Token,  keyword, Identifier, newline},
+    TokenInput, TokenParser
+};
+
 #[derive(Debug)]
 pub enum ParsedType {
-    Data(String),
+    Data(Spanned<Identifier>),
+    Array(Box<ParsedType>)
 }
+
 #[derive(Debug)]
-pub struct Data {
-    name: String,
-    fields: Vec<(String, ParsedType)>,
+pub struct Struct {
+    pub name: Spanned<Identifier>,
+    pub fields: Box<[(Spanned<Identifier>, Spanned<ParsedType>)]>,
 }
 
-fn field_parser() -> impl Parser<char, (String, ParsedType), Error = Simple<char>> {
-    ident().labelled("data-field-name")
-        .then_ignore(just(":").padded())
-        .then(type_parser().labelled("data-field-type"))
-        .labelled("data-field")
-}
-
-pub fn data_parser() -> impl Parser<char, Data, Error = Simple<char>> {
-    keyword("data")
-        .ignore_then(ident().padded().labelled("data-identifier"))
+fn field_parser<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, (Spanned<Identifier>, Spanned<ParsedType>)>
+{
+    ident()
+        .map_with_span(Spanned)
+        .then_ignore(just(Token::Colon).padded_by(newline().repeated()))
         .then(
-            field_parser().padded()
-                .separated_by(just(","))
-                .allow_trailing()
-                .delimited_by(just("{"), just("}"))
-                .labelled("data-fields"),
+            type_parser()
+                .map_with_span(Spanned)
+                .padded_by(newline().repeated())
+                /* .labelled("data-field-type") */,
         )
-        .map(|(name, fields)| Data { name, fields })
-        .labelled("data")
+        /* .labelled("data-field") */
 }
 
-pub fn type_parser() -> impl Parser<char, ParsedType, Error = Simple<char>> {
-    ident().map(ParsedType::Data).padded()
+pub fn struct_parser<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, Struct> {
+    keyword(Identifier::Struct)
+        .ignore_then(
+            ident()
+                .map_with_span(Spanned)
+                .padded_by(newline().repeated())
+                /* .labelled("data-identifier") */,
+        )
+        .then(
+            field_parser()
+                .padded_by(newline().repeated())
+                .separated_by(just(Token::Comma))
+                .allow_trailing()
+                .collect::<Vec<_>>().map(Vec::into_boxed_slice)
+                .delimited_by(just(Token::BraceOpen), just(Token::BraceClosed))
+                /* .labelled("data-fields") */,
+        )
+        .map(|(name, fields)| Struct { name, fields })
+        /* .labelled("data") */
+}
+
+pub fn type_parser<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, ParsedType> + Clone {
+    recursive(|p| choice((
+        ident().map_with_span(Spanned).map(ParsedType::Data),
+        p.delimited_by(just(Token::BracketOpen), just(Token::BracketClosed)).map(|t| ParsedType::Array(Box::new(t)))
+    )))
 }
