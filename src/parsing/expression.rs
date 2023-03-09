@@ -9,7 +9,7 @@ use crate::parsing::tokenizer::Identifier;
 
 use super::{
     literals::number::{parse_complex_number, NumberLiteralResult},
-    tokenizer::{ident, keyword, newline, Operation, Token},
+    tokenizer::{ident, keyword, Operation, Token},
     utilities::Spanned,
     ParserState, TokenInput, TokenParser,
 };
@@ -69,7 +69,7 @@ where EP: TokenParser<'a, I, Expression> + Clone + 'a {
         .then(
             expr_parser
                 .map_with_span(Spanned)
-                .padded_by(newline().repeated())
+                .paddedln()
                 .separated_by(just(Token::Comma))
                 .allow_trailing()
                 .at_least(0)
@@ -115,7 +115,7 @@ where EP: TokenParser<'a, I, Expression> + Clone + 'a {
             .boxed()
             .map_with_span(Spanned)
             .labelled("assignement_operator")
-            .padded_by(newline().repeated())
+            .paddedln()
             .then(
                 expr_parser
                     .map_with_span(Spanned)
@@ -140,18 +140,18 @@ where EP: TokenParser<'a, I, Expression> + Clone + 'a {
             expr_parser
                 .clone()
                 .map_with_span(Spanned)
-                .padded_by(newline().repeated())
+                .paddedln()
                 .delimited_by(just(Token::ParenOpen), just(Token::ParenClosed)),
         )
         .then(
             expr_parser
                 .clone()
                 .map_with_span(Spanned)
-                .padded_by(newline().repeated()),
+                .paddedln(),
         )
         .then(
             keyword(Identifier::Else)
-                .padded_by(newline().repeated())
+                .paddedln()
                 .ignore_then(expr_parser.map_with_span(Spanned)),
         )
         .map(|((condition, then), other)| Expression::If {
@@ -292,11 +292,11 @@ where
         .then(
             operator_parser
                 .map_with_span(Spanned)
-                .padded_by(newline().repeated())
+                .paddedln()
                 .then(
                     next_parser
                         .map_with_span(Spanned)
-                        .padded_by(newline().repeated()),
+                        .paddedln(),
                 )
                 .repeated()
                 .collect::<Vec<_>>()

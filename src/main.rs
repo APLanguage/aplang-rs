@@ -4,6 +4,7 @@
 #![feature(associated_type_defaults)]
 #![feature(once_cell)]
 #![feature(trait_alias)]
+#![feature(return_position_impl_trait_in_trait)]
 
 use chumsky::{
     input::{Input, Stream},

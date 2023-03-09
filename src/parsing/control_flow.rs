@@ -3,7 +3,7 @@ use chumsky::{prelude::just, primitive::choice, Parser};
 use super::{
     expression::{expression_parser, Expression},
     statement::Statement,
-    tokenizer::{keyword, newline, Identifier, Token},
+    tokenizer::{keyword, Identifier, Token},
     utilities::Spanned,
     TokenInput, TokenParser,
 };
@@ -30,10 +30,10 @@ pub fn if_parser<'a, I: TokenInput<'a>>(
         .ignore_then(
             expression_parser().delimited_by(just(Token::ParenOpen), just(Token::ParenClosed)),
         )
-        .then(stmt_parser.clone().padded_by(newline().repeated()))
+        .then(stmt_parser.clone().paddedln())
         .then(
             keyword(Identifier::Else)
-                .padded_by(newline().repeated())
+                .paddedln()
                 .ignore_then(stmt_parser)
                 .or_not(),
         )
@@ -52,7 +52,7 @@ pub fn while_parser<'a, I: TokenInput<'a>>(
         .ignore_then(
             expression_parser().delimited_by(just(Token::ParenOpen), just(Token::ParenClosed)),
         )
-        .then(stmt_parser.padded_by(newline().repeated()))
+        .then(stmt_parser.paddedln())
         .map(|(condition, statement)| ControlFlow::While {
             condition,
             statement: Box::new(statement),
@@ -79,7 +79,7 @@ fn return_parser<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, ControlFlow
         .ignore_then(
             expression_parser()
                 .map_with_span(Spanned)
-                .padded_by(newline().repeated())
+                .paddedln()
                 .or_not()
                 .labelled("return-expr"),
         )

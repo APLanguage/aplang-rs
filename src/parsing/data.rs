@@ -5,7 +5,7 @@ use chumsky::{
 };
 
 use super::{
-    tokenizer::{ident, keyword, newline, Identifier, Token},
+    tokenizer::{ident, keyword, Identifier, Token},
     utilities::Spanned,
     TokenInput, TokenParser,
 };
@@ -26,11 +26,11 @@ fn field_parser<'a, I: TokenInput<'a>>(
 ) -> impl TokenParser<'a, I, (Spanned<Identifier>, Spanned<ParsedType>)> {
     ident()
         .map_with_span(Spanned)
-        .then_ignore(just(Token::Colon).padded_by(newline().repeated()))
+        .then_ignore(just(Token::Colon).paddedln())
         .then(
             type_parser()
                 .map_with_span(Spanned)
-                .padded_by(newline().repeated())
+                .paddedln()
                 .labelled("data-field-type"),
         )
         .boxed()
@@ -42,12 +42,12 @@ pub fn struct_parser<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, Struct>
         .ignore_then(
             ident()
                 .map_with_span(Spanned)
-                .padded_by(newline().repeated())
+                .paddedln()
                 .labelled("data-identifier"),
         )
         .then(
             field_parser()
-                .padded_by(newline().repeated())
+                .paddedln()
                 .separated_by(just(Token::Comma))
                 .allow_trailing()
                 .collect::<Vec<_>>()
