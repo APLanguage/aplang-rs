@@ -1,12 +1,12 @@
 use chumsky::{primitive::choice, IterParser, Parser};
 
 use crate::parsing::{
-    ast::declarations::Declaration,
+    ast::{declarations::Declaration, file::File},
     parsers::declarations::{function_parser, struct_parser, variable_parser},
     TokenInput, TokenParser,
 };
 
-pub fn file_parser<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, Box<[Declaration]>> {
+pub fn file_parser<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, File> {
     choice((
         struct_parser().map(Declaration::Struct),
         variable_parser(),
@@ -15,5 +15,5 @@ pub fn file_parser<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, Box<[Decl
     .paddedln()
     .repeated()
     .collect::<Vec<_>>()
-    .map(|v| v.into_boxed_slice())
+    .map(|v| File::new(v.into_boxed_slice()))
 }
