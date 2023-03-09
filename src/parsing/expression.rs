@@ -161,7 +161,6 @@ pub fn atom_parser<'a, EP, I: TokenInput<'a>>(
 ) -> impl TokenParser<'a, I, Expression> + Clone
 where EP: TokenParser<'a, I, Expression> + Clone + 'a {
     choice((
-        // string_parser().map(Expression::StringLiteral), TODO: string & number
         just(Token::Number)
             .map_with_state(|_, span: SimpleSpan, input: &mut ParserState| {
                 parse_complex_number(input.slice(span.into()))
