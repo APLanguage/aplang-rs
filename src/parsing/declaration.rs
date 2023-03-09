@@ -49,6 +49,7 @@ pub fn variable_parser<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, Decla
             })
         })
         .padded_by(newline().repeated())
+        .boxed()
         /* .labelled("var") */
 }
 
@@ -68,7 +69,7 @@ pub fn function_parser<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, Decla
                 .separated_by(just(Token::Comma))
                 .collect::<Vec<_>>().map(Vec::into_boxed_slice)
                 .delimited_by(just(Token::ParenOpen), just(Token::ParenClosed))
-                .padded_by(newline().repeated())
+                .padded_by(newline().repeated()).boxed()
                 /* .labelled("fn-params") */,
         )
         .then(
@@ -83,7 +84,7 @@ pub fn function_parser<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, Decla
                 .padded_by(newline().repeated())
                 .repeated()
                 .collect::<Vec<_>>().map(Vec::into_boxed_slice)
-                .delimited_by(just(Token::BraceOpen), just(Token::BraceClosed))
+                .delimited_by(just(Token::BraceOpen), just(Token::BraceClosed)).boxed()
                 /* .labelled("fn-stmts") */,
         )
         .map(|(((name, parameters), r#type), statements)| {
@@ -95,5 +96,6 @@ pub fn function_parser<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, Decla
             })
         })
         .padded_by(newline().repeated())
+        .boxed()
         /* .labelled("function") */
 }

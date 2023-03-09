@@ -31,7 +31,7 @@ fn field_parser<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, (Spanned<Ide
                 .map_with_span(Spanned)
                 .padded_by(newline().repeated())
                 /* .labelled("data-field-type") */,
-        )
+        ).boxed()
         /* .labelled("data-field") */
 }
 
@@ -49,10 +49,11 @@ pub fn struct_parser<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, Struct>
                 .separated_by(just(Token::Comma))
                 .allow_trailing()
                 .collect::<Vec<_>>().map(Vec::into_boxed_slice)
-                .delimited_by(just(Token::BraceOpen), just(Token::BraceClosed))
+                .delimited_by(just(Token::BraceOpen), just(Token::BraceClosed)).boxed()
                 /* .labelled("data-fields") */,
         )
         .map(|(name, fields)| Struct { name, fields })
+        .boxed()
         /* .labelled("data") */
 }
 

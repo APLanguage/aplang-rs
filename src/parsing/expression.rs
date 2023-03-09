@@ -59,7 +59,7 @@ macro_rules! ops_parser {
 }
 
 fn call<'a, EP, I: TokenInput<'a>>(expr_parser: EP) -> impl TokenParser<'a, I, Call> + Clone
-where EP: TokenParser<'a, I, Expression> + Clone {
+where EP: TokenParser<'a, I, Expression> + Clone + 'a {
     ident()
         .map_with_span(Spanned)
         .then(
@@ -72,7 +72,8 @@ where EP: TokenParser<'a, I, Expression> + Clone {
                 .collect()
                 .map(Vec::into_boxed_slice)
                 .delimited_by(just(Token::ParenOpen), just(Token::ParenClosed))
-                .or_not(),
+                .or_not()
+                .boxed(),
         )
         .map(|(identifier, params)| match params {
             Some(parameters) => Call::Call {
@@ -87,7 +88,7 @@ where EP: TokenParser<'a, I, Expression> + Clone {
 fn assignment<'a, EP, I: TokenInput<'a>>(
     expr_parser: EP,
 ) -> impl TokenParser<'a, I, Expression> + Clone
-where EP: TokenParser<'a, I, Expression> + Clone {
+where EP: TokenParser<'a, I, Expression> + Clone + 'a {
     call(expr_parser.clone())
         .map_with_span(Spanned)
         /* .labelled("assignement_left") */
@@ -107,6 +108,7 @@ where EP: TokenParser<'a, I, Expression> + Clone {
                 GreaterGreaterEqual,
                 LessLessEqual
             )
+            .boxed()
             .map_with_span(Spanned)
             /* .labelled("assignement_operator") */
             .padded_by(newline().repeated())
@@ -119,13 +121,14 @@ where EP: TokenParser<'a, I, Expression> + Clone {
             op,
             expression: Box::new(expression),
         })
+        .boxed()
     /* .labelled("assignement") */
 }
 
 fn if_expr_parser<'a, EP, I: TokenInput<'a>>(
     expr_parser: EP,
 ) -> impl TokenParser<'a, I, Expression> + Clone
-where EP: TokenParser<'a, I, Expression> + Clone {
+where EP: TokenParser<'a, I, Expression> + Clone + 'a {
     keyword(Identifier::If)
         .ignore_then(
             expr_parser
@@ -150,12 +153,13 @@ where EP: TokenParser<'a, I, Expression> + Clone {
             then: Box::new(then),
             other: Box::new(other),
         })
+        .boxed()
 }
 
 pub fn atom_parser<'a, EP, I: TokenInput<'a>>(
     expr_parser: EP,
 ) -> impl TokenParser<'a, I, Expression> + Clone
-where EP: TokenParser<'a, I, Expression> + Clone {
+where EP: TokenParser<'a, I, Expression> + Clone + 'a {
     choice((
         // string_parser().map(Expression::StringLiteral), TODO: string & number
         just(Token::Number)
@@ -174,7 +178,8 @@ where EP: TokenParser<'a, I, Expression> + Clone {
             .ignore_then(call(expr_parser).map_with_span(Spanned))
             .repeated()
             .collect::<Vec<_>>()
-            .map(Vec::into_boxed_slice),
+            .map(Vec::into_boxed_slice)
+            .boxed(),
     )
     .map(|(expression, calls)| {
         if calls.is_empty() {
@@ -185,7 +190,7 @@ where EP: TokenParser<'a, I, Expression> + Clone {
                 calls,
             }
         }
-    })
+    }).boxed()
     /* .labelled("atom") */
 }
 
@@ -196,7 +201,7 @@ pub fn expression_parser<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, Exp
             assignment(p.clone()),
             logic_parser(p),
         ))
-    })
+    }).boxed()
     /* .labelled("expression") */
 }
 
@@ -206,7 +211,7 @@ macro_rules! binary_parser {
         paste! {
             fn  [< $name _parser >] <'a, EP, I: TokenInput<'a>>(expr_parser: EP) -> impl TokenParser<'a, I, Expression> + Clone
             where
-                EP: TokenParser<'a, I, Expression> + Clone,
+                EP: TokenParser<'a, I, Expression> + Clone + 'a,
             {
                 math_parser(
                     [< $next_name _parser >](expr_parser.clone()),
@@ -248,8 +253,8 @@ pub fn math_parser<'a, NP, OP, I: TokenInput<'a>>(
     operator_parser: OP,
 ) -> impl TokenParser<'a, I, Expression> + Clone
 where
-    NP: TokenParser<'a, I, Expression> + Clone,
-    OP: TokenParser<'a, I, Operation> + Clone,
+    NP: TokenParser<'a, I, Expression> + Clone + 'a,
+    OP: TokenParser<'a, I, Operation> + Clone + 'a,
 {
     next_parser
         .clone()
@@ -277,5 +282,6 @@ where
                 }
             }
         })
+        .boxed()
     /* .labelled("math") */
 }

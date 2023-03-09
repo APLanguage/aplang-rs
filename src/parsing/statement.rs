@@ -27,6 +27,6 @@ pub fn statement_parser<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, Stat
             expression_parser().map(Statement::Expression),
             just(Token::Semicolon).map(|_| Statement::None),
         )).padded_by(newline().repeated())
-    })
+    }).boxed()
     // .labelled("statement")
 }
