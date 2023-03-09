@@ -1,27 +1,14 @@
-use chumsky::{prelude::just, primitive::choice, Parser};
+use chumsky::{prelude::just, primitive::choice, recursive::recursive, Parser};
 
-use super::{
-    expression::{expression_parser, Expression},
-    statement::Statement,
+use crate::parsing::{
+    ast::statements::{ControlFlow, Statement},
+    parsers::expressions::expression_parser,
     tokenizer::{keyword, Identifier, Token},
     utilities::Spanned,
     TokenInput, TokenParser,
 };
 
-#[derive(Debug)]
-pub enum ControlFlow {
-    If {
-        condition: Expression,
-        then: Box<Statement>,
-        other: Option<Box<Statement>>,
-    },
-    While {
-        condition: Expression,
-        statement: Box<Statement>,
-    },
-    Return(Option<Spanned<Expression>>),
-    Break,
-}
+use super::declarations::variable_parser;
 
 pub fn if_parser<'a, I: TokenInput<'a>>(
     stmt_parser: impl TokenParser<'a, I, Statement> + Clone,
@@ -85,4 +72,18 @@ fn return_parser<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, ControlFlow
         )
         .map(ControlFlow::Return)
         .labelled("return")
+}
+
+pub fn statement_parser<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, Statement> + Clone {
+    recursive(|p| {
+        choice((
+            variable_parser().map(Statement::Declaration),
+            control_flow_parser(p).map(Statement::ControlFlow),
+            expression_parser().map(Statement::Expression),
+            just(Token::Semicolon).map(|_| Statement::None),
+        ))
+        .paddedln()
+    })
+    .boxed()
+    .labelled("statement")
 }

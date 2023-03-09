@@ -5,52 +5,14 @@ use chumsky::{
     IterParser, Parser,
 };
 
-use crate::parsing::tokenizer::Identifier;
-
-use super::{
-    literals::number::{parse_complex_number, NumberLiteralResult},
+use crate::parsing::{
     tokenizer::{ident, keyword, Operation, Token},
+    ast::expressions::{Call, Expression},
+    literals::number::parse_complex_number,
+    tokenizer::Identifier,
     utilities::Spanned,
     ParserState, TokenInput, TokenParser,
 };
-
-#[derive(Debug, PartialEq)]
-pub enum Call {
-    Identifier(Spanned<Identifier>),
-    Call {
-        identifier: Spanned<Identifier>,
-        parameters: Box<[Spanned<Expression>]>,
-    },
-}
-
-#[derive(Debug, PartialEq)]
-pub enum Expression {
-    If {
-        condition: Box<Spanned<Expression>>,
-        then: Box<Spanned<Expression>>,
-        other: Box<Spanned<Expression>>,
-    },
-    Number(NumberLiteralResult),
-    StringLiteral(String),
-    CallChain {
-        expression: Box<Spanned<Expression>>,
-        calls: Box<[Spanned<Call>]>,
-    },
-    Call(Call),
-    Operation {
-        base: Box<Spanned<Expression>>,
-        continuation: Box<[(Spanned<Operation>, Spanned<Expression>)]>,
-    },
-    Assignement {
-        call: Spanned<Call>,
-        op: Spanned<Operation>,
-        expression: Box<Spanned<Expression>>,
-    },
-    Unary {
-        ops: Box<[Spanned<Operation>]>,
-        expression: Box<Expression>,
-    },
-}
 
 macro_rules! ops_parser {
     ($($variant:ident), *) => {
@@ -143,12 +105,7 @@ where EP: TokenParser<'a, I, Expression> + Clone + 'a {
                 .paddedln()
                 .delimited_by(just(Token::ParenOpen), just(Token::ParenClosed)),
         )
-        .then(
-            expr_parser
-                .clone()
-                .map_with_span(Spanned)
-                .paddedln(),
-        )
+        .then(expr_parser.clone().map_with_span(Spanned).paddedln())
         .then(
             keyword(Identifier::Else)
                 .paddedln()
@@ -172,7 +129,8 @@ where EP: TokenParser<'a, I, Expression> + Clone + 'a {
         .at_least(1)
         .collect::<Vec<_>>()
         .map(|v| v.into_boxed_slice())
-        .or_not().labelled("unary-ops")
+        .or_not()
+        .labelled("unary-ops")
         .then(atom_parser(expr_parser))
         .map(
             |(ops, expression): (Option<Box<[Spanned<Operation>]>>, _)| match ops {
@@ -182,7 +140,8 @@ where EP: TokenParser<'a, I, Expression> + Clone + 'a {
                 },
                 None => expression,
             },
-        ).labelled("unary")
+        )
+        .labelled("unary")
 }
 
 pub fn atom_parser<'a, EP, I: TokenInput<'a>>(
@@ -293,11 +252,7 @@ where
             operator_parser
                 .map_with_span(Spanned)
                 .paddedln()
-                .then(
-                    next_parser
-                        .map_with_span(Spanned)
-                        .paddedln(),
-                )
+                .then(next_parser.map_with_span(Spanned).paddedln())
                 .repeated()
                 .collect::<Vec<_>>()
                 .map(Vec::into_boxed_slice),

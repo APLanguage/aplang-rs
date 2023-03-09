@@ -12,7 +12,7 @@ use chumsky::{
 };
 use logos::Logos;
 
-use crate::parsing::{file::file_parser, tokenizer::Token, ParserState};
+use crate::parsing::{parsers::file::file_parser, tokenizer::Token, ParserState};
 
 pub mod parsing;
 

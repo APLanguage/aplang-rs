@@ -1,3 +1,9 @@
+pub mod utilities;
+pub mod tokenizer;
+pub mod parsers;
+pub mod literals;
+pub mod ast;
+
 use std::ops::Range;
 
 use chumsky::{
@@ -9,16 +15,6 @@ use chumsky::{
 };
 
 use self::tokenizer::{newline, Token};
-
-pub mod control_flow;
-pub mod data;
-pub mod declaration;
-pub mod expression;
-pub mod file;
-pub mod literals;
-pub mod statement;
-pub mod tokenizer;
-pub mod utilities;
 
 pub struct ParserState<'a> {
     input: &'a str,

@@ -1,35 +1,63 @@
-use super::{
-    data::ParsedType,
-    data::{type_parser, Struct},
-    expression::{expression_parser, Expression},
-    statement::{statement_parser, Statement},
+use crate::parsing::{
+    parsers::expressions::expression_parser,
+    ast::declarations::{Struct, ParsedType, Declaration, Variable, Function},
     tokenizer::{ident, keyword, Identifier, Token},
     utilities::Spanned,
     TokenInput, TokenParser,
 };
-use chumsky::{primitive::just, IterParser, Parser};
+use chumsky::{primitive::{just, choice}, IterParser, Parser, recursive::recursive};
 
-#[derive(Debug)]
-pub struct Function {
-    pub name: Spanned<Identifier>,
-    pub parameters: Box<[(Spanned<Identifier>, Spanned<ParsedType>)]>,
-    pub r#type: Option<Spanned<ParsedType>>,
-    pub statements: Box<[Statement]>,
+use super::statements::statement_parser;
+
+fn field_parser<'a, I: TokenInput<'a>>(
+) -> impl TokenParser<'a, I, (Spanned<Identifier>, Spanned<ParsedType>)> {
+    ident()
+        .map_with_span(Spanned)
+        .then_ignore(just(Token::Colon).paddedln())
+        .then(
+            type_parser()
+                .map_with_span(Spanned)
+                .paddedln()
+                .labelled("data-field-type"),
+        )
+        .boxed()
+        .labelled("data-field")
 }
 
-#[derive(Debug)]
-pub struct Variable {
-    pub name: Spanned<Identifier>,
-    pub r#type: Spanned<ParsedType>,
-    pub expression: Spanned<Expression>,
+pub fn struct_parser<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, Struct> {
+    keyword(Identifier::Struct)
+        .ignore_then(
+            ident()
+                .map_with_span(Spanned)
+                .paddedln()
+                .labelled("data-identifier"),
+        )
+        .then(
+            field_parser()
+                .paddedln()
+                .separated_by(just(Token::Comma))
+                .allow_trailing()
+                .collect::<Vec<_>>()
+                .map(Vec::into_boxed_slice)
+                .delimited_by(just(Token::BraceOpen), just(Token::BraceClosed))
+                .boxed()
+                .labelled("data-fields"),
+        )
+        .map(|(name, fields)| Struct { name, fields })
+        .boxed()
+        .labelled("data")
 }
 
-#[derive(Debug)]
-pub enum Declaration {
-    Variable(Variable),
-    Function(Function),
-    Struct(Struct),
+pub fn type_parser<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, ParsedType> + Clone {
+    recursive(|p| {
+        choice((
+            ident().map_with_span(Spanned).map(ParsedType::Data),
+            p.delimited_by(just(Token::BracketOpen), just(Token::BracketClosed))
+                .map(|t| ParsedType::Array(Box::new(t))),
+        ))
+    })
 }
+
 
 pub fn variable_parser<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, Declaration> + Clone {
     just(Token::Identifier(Identifier::Var))
