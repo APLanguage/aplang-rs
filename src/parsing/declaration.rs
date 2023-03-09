@@ -3,14 +3,11 @@ use super::{
     data::{type_parser, Struct},
     expression::{expression_parser, Expression},
     statement::{statement_parser, Statement},
+    tokenizer::{ident, keyword, newline, Identifier, Token},
     utilities::Spanned,
-    tokenizer::{Identifier, Token, ident, keyword, newline},
-    TokenInput, TokenParser
+    TokenInput, TokenParser,
 };
-use chumsky::{
-    primitive::just,
-    IterParser,
-};
+use chumsky::{primitive::just, IterParser};
 
 #[derive(Debug)]
 pub struct Function {
@@ -36,9 +33,17 @@ pub enum Declaration {
 
 pub fn variable_parser<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, Declaration> + Clone {
     just(Token::Identifier(Identifier::Var))
-        .ignore_then(ident().map_with_span(Spanned).padded_by(newline().repeated()))
+        .ignore_then(
+            ident()
+                .map_with_span(Spanned)
+                .padded_by(newline().repeated()),
+        )
         .then_ignore(just(Token::Colon).padded_by(newline().repeated()))
-        .then(type_parser().map_with_span(Spanned).padded_by(newline().repeated()))
+        .then(
+            type_parser()
+                .map_with_span(Spanned)
+                .padded_by(newline().repeated()),
+        )
         .then_ignore(just(Token::Equal).padded_by(newline().repeated()))
         .then(expression_parser().map_with_span(Spanned))
         .map(|((name, r#type), expression)| {
@@ -50,42 +55,57 @@ pub fn variable_parser<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, Decla
         })
         .padded_by(newline().repeated())
         .boxed()
-        /* .labelled("var") */
+        .labelled("var")
 }
 
-fn parameter_parser<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, (Spanned<Identifier>, Spanned<ParsedType>)> {
-    ident().map_with_span(Spanned)
-        /* .labelled("fn-param-name") */
+fn parameter_parser<'a, I: TokenInput<'a>>(
+) -> impl TokenParser<'a, I, (Spanned<Identifier>, Spanned<ParsedType>)> {
+    ident()
+        .map_with_span(Spanned)
+        .labelled("fn-param-name")
         .then_ignore(just(Token::Colon).padded_by(newline().repeated()))
-        .then(type_parser().map_with_span(Spanned)/* .labelled("fn-param-type") */)
-        /* .labelled("fn-param") */
+        .then(
+            type_parser()
+                .map_with_span(Spanned)
+                .labelled("fn-param-type"),
+        )
+        .labelled("fn-param")
 }
 
 pub fn function_parser<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, Declaration> {
     keyword(Identifier::Fn)
-        .ignore_then(ident().map_with_span(Spanned).padded_by(newline().repeated())/* .labelled("fn-name") */)
+        .ignore_then(
+            ident()
+                .map_with_span(Spanned)
+                .padded_by(newline().repeated())
+                .labelled("fn-name"),
+        )
         .then(
             parameter_parser()
                 .separated_by(just(Token::Comma))
-                .collect::<Vec<_>>().map(Vec::into_boxed_slice)
+                .collect::<Vec<_>>()
+                .map(Vec::into_boxed_slice)
                 .delimited_by(just(Token::ParenOpen), just(Token::ParenClosed))
-                .padded_by(newline().repeated()).boxed()
-                /* .labelled("fn-params") */,
+                .padded_by(newline().repeated())
+                .boxed()
+                .labelled("fn-params"),
         )
         .then(
             just(Token::ArrowRight)
                 .padded_by(newline().repeated())
-                /* .labelled("fn-arrow") */
-                .ignore_then(type_parser().map_with_span(Spanned)/* .labelled("fn-type") */)
+                .labelled("fn-arrow")
+                .ignore_then(type_parser().map_with_span(Spanned).labelled("fn-type"))
                 .or_not(),
         )
         .then(
             statement_parser()
                 .padded_by(newline().repeated())
                 .repeated()
-                .collect::<Vec<_>>().map(Vec::into_boxed_slice)
-                .delimited_by(just(Token::BraceOpen), just(Token::BraceClosed)).boxed()
-                /* .labelled("fn-stmts") */,
+                .collect::<Vec<_>>()
+                .map(Vec::into_boxed_slice)
+                .delimited_by(just(Token::BraceOpen), just(Token::BraceClosed))
+                .boxed()
+                .labelled("fn-stmts"),
         )
         .map(|(((name, parameters), r#type), statements)| {
             Declaration::Function(Function {
@@ -97,5 +117,5 @@ pub fn function_parser<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, Decla
         })
         .padded_by(newline().repeated())
         .boxed()
-        /* .labelled("function") */
+        .labelled("function")
 }

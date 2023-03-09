@@ -46,6 +46,10 @@ pub enum Expression {
         op: Spanned<Operation>,
         expression: Box<Spanned<Expression>>,
     },
+    Unary {
+        ops: Box<[Spanned<Operation>]>,
+        expression: Box<Expression>,
+    },
 }
 
 macro_rules! ops_parser {
@@ -82,7 +86,7 @@ where EP: TokenParser<'a, I, Expression> + Clone + 'a {
             },
             None => Call::Identifier(identifier),
         })
-    /* .labelled("call") */
+        .labelled("call")
 }
 
 fn assignment<'a, EP, I: TokenInput<'a>>(
@@ -91,7 +95,7 @@ fn assignment<'a, EP, I: TokenInput<'a>>(
 where EP: TokenParser<'a, I, Expression> + Clone + 'a {
     call(expr_parser.clone())
         .map_with_span(Spanned)
-        /* .labelled("assignement_left") */
+        .labelled("assignement_left")
         .then(
             ops_parser!(
                 PlusEqual,
@@ -110,10 +114,12 @@ where EP: TokenParser<'a, I, Expression> + Clone + 'a {
             )
             .boxed()
             .map_with_span(Spanned)
-            /* .labelled("assignement_operator") */
+            .labelled("assignement_operator")
             .padded_by(newline().repeated())
             .then(
-                expr_parser.map_with_span(Spanned), /* .labelled("assignement_right") */
+                expr_parser
+                    .map_with_span(Spanned)
+                    .labelled("assignement_right"),
             ),
         )
         .map(|(call, (op, expression))| Expression::Assignement {
@@ -122,7 +128,7 @@ where EP: TokenParser<'a, I, Expression> + Clone + 'a {
             expression: Box::new(expression),
         })
         .boxed()
-    /* .labelled("assignement") */
+        .labelled("assignement")
 }
 
 fn if_expr_parser<'a, EP, I: TokenInput<'a>>(
@@ -154,6 +160,29 @@ where EP: TokenParser<'a, I, Expression> + Clone + 'a {
             other: Box::new(other),
         })
         .boxed()
+}
+
+pub fn unary_parser<'a, EP, I: TokenInput<'a>>(
+    expr_parser: EP,
+) -> impl TokenParser<'a, I, Expression> + Clone
+where EP: TokenParser<'a, I, Expression> + Clone + 'a {
+    ops_parser!(Minus, Bang)
+        .map_with_span(Spanned)
+        .repeated()
+        .at_least(1)
+        .collect::<Vec<_>>()
+        .map(|v| v.into_boxed_slice())
+        .or_not().labelled("unary-ops")
+        .then(atom_parser(expr_parser))
+        .map(
+            |(ops, expression): (Option<Box<[Spanned<Operation>]>>, _)| match ops {
+                Some(unary_ops) => Expression::Unary {
+                    ops: unary_ops,
+                    expression: Box::new(expression),
+                },
+                None => expression,
+            },
+        ).labelled("unary")
 }
 
 pub fn atom_parser<'a, EP, I: TokenInput<'a>>(
@@ -189,8 +218,9 @@ where EP: TokenParser<'a, I, Expression> + Clone + 'a {
                 calls,
             }
         }
-    }).boxed()
-    /* .labelled("atom") */
+    })
+    .boxed()
+    .labelled("atom")
 }
 
 pub fn expression_parser<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, Expression> + Clone {
@@ -200,8 +230,9 @@ pub fn expression_parser<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, Exp
             assignment(p.clone()),
             logic_parser(p),
         ))
-    }).boxed()
-    /* .labelled("expression") */
+    })
+    .boxed()
+    .labelled("expression")
 }
 
 use paste::paste;
@@ -214,9 +245,9 @@ macro_rules! binary_parser {
             {
                 math_parser(
                     [< $next_name _parser >](expr_parser.clone()),
-                    $ops/* .labelled(stringify!([< $name _operator >])) */
+                    $ops.labelled(stringify!([< $name _operator >]))
                 )
-                /* .labelled(stringify!($name)) */
+                .labelled(stringify!($name))
             }
         }
     };
@@ -237,7 +268,7 @@ binary_parser!(
 );
 binary_parser!(
     bitops,
-    atom,
+    unary,
     ops_parser!(
         Bar,
         Ampersand,
@@ -282,5 +313,5 @@ where
             }
         })
         .boxed()
-    /* .labelled("math") */
+        .labelled("math")
 }

@@ -4,8 +4,8 @@ use super::{
     expression::{expression_parser, Expression},
     statement::Statement,
     tokenizer::{keyword, newline, Identifier, Token},
-    TokenInput, TokenParser,
     utilities::Spanned,
+    TokenInput, TokenParser,
 };
 
 #[derive(Debug)]
@@ -42,7 +42,7 @@ pub fn if_parser<'a, I: TokenInput<'a>>(
             then: Box::new(then),
             other: other.map(Box::new),
         })
-    /* .labelled("if") */
+        .labelled("if")
 }
 
 pub fn while_parser<'a, I: TokenInput<'a>>(
@@ -57,7 +57,7 @@ pub fn while_parser<'a, I: TokenInput<'a>>(
             condition,
             statement: Box::new(statement),
         })
-    /* .labelled("while") */
+        .labelled("while")
 }
 
 pub fn control_flow_parser<'a, I: TokenInput<'a>>(
@@ -66,10 +66,12 @@ pub fn control_flow_parser<'a, I: TokenInput<'a>>(
     choice((
         if_parser(stmt_parser.clone()),
         while_parser(stmt_parser),
-        keyword(Identifier::Break).map(|_| ControlFlow::Break), /* .labelled("break") */
+        keyword(Identifier::Break)
+            .map(|_| ControlFlow::Break)
+            .labelled("break"),
         return_parser(),
     ))
-    /* .labelled("control-flow") */
+    .labelled("control-flow")
 }
 
 fn return_parser<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, ControlFlow> + Clone {
@@ -78,8 +80,9 @@ fn return_parser<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, ControlFlow
             expression_parser()
                 .map_with_span(Spanned)
                 .padded_by(newline().repeated())
-                .or_not(), /* .labelled("return-expr") */
+                .or_not()
+                .labelled("return-expr"),
         )
         .map(ControlFlow::Return)
-    /* .labelled("return") */
+        .labelled("return")
 }

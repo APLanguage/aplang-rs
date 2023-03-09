@@ -89,6 +89,9 @@ pub enum Token {
     #[token("!=")]
     BangEqual,
 
+    #[token("!")]
+    Bang,
+
     #[token("=")]
     Equal,
 
@@ -193,6 +196,8 @@ pub enum Operation {
     ShiftRight,
     ShiftLeft,
     ShiftRightUnsigned,
+
+    Not,
     Unknown
 }
 
@@ -235,6 +240,7 @@ impl From<Token> for Operation {
             GreaterGreaterEqual => ShiftRight,
             LessLessEqual => ShiftLeft,
             GreaterGreaterGreaterEqual => ShiftRightUnsigned,
+            Bang => Not,
             _ => Unknown
         }
     }

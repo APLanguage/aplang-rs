@@ -23,7 +23,7 @@ fn main() {
       }
       
       fn test(person: Person) {
-        print(person.age + 0)
+        print(person.age + (if(true) -0 else 0))
         print(person.name)
       }
     "#;
