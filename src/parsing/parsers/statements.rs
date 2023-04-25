@@ -2,17 +2,17 @@ use chumsky::{prelude::just, primitive::choice, recursive::recursive, Parser};
 
 use crate::parsing::{
     ast::statements::{ControlFlow, Statement},
-    parsers::expressions::expression_parser,
+    parsers::{expressions::expression_parser, TokenInput, TokenParser},
     tokenizer::{keyword, Identifier, Token},
     utilities::Spanned,
-    TokenInput, TokenParser,
 };
 
-use super::declarations::variable_parser;
+use super::{declarations::variable_parser, TokenParserExt};
 
-pub fn if_parser<'a, I: TokenInput<'a>>(
-    stmt_parser: impl TokenParser<'a, I, Statement> + Clone,
-) -> impl TokenParser<'a, I, ControlFlow> + Clone {
+pub fn if_parser<'a, I, SP>(stmt_parser: SP) -> impl TokenParser<'a, I, ControlFlow> + Clone
+where
+    I: TokenInput<'a>,
+    SP: TokenParser<'a, I, Statement> + Clone + 'a, {
     keyword(Identifier::If)
         .ignore_then(
             expression_parser().delimited_by(just(Token::ParenOpen), just(Token::ParenClosed)),
@@ -22,7 +22,8 @@ pub fn if_parser<'a, I: TokenInput<'a>>(
             keyword(Identifier::Else)
                 .paddedln()
                 .ignore_then(stmt_parser)
-                .or_not(),
+                .or_not()
+                .boxed(),
         )
         .map(|((condition, then), other)| ControlFlow::If {
             condition,
@@ -32,9 +33,10 @@ pub fn if_parser<'a, I: TokenInput<'a>>(
         .labelled("if")
 }
 
-pub fn while_parser<'a, I: TokenInput<'a>>(
-    stmt_parser: impl TokenParser<'a, I, Statement> + Clone,
-) -> impl TokenParser<'a, I, ControlFlow> + Clone {
+pub fn while_parser<'a, I, SP>(stmt_parser: SP) -> impl TokenParser<'a, I, ControlFlow> + Clone
+where
+    I: TokenInput<'a>,
+    SP: TokenParser<'a, I, Statement> + Clone, {
     keyword(Identifier::While)
         .ignore_then(
             expression_parser().delimited_by(just(Token::ParenOpen), just(Token::ParenClosed)),
@@ -45,11 +47,15 @@ pub fn while_parser<'a, I: TokenInput<'a>>(
             statement: Box::new(statement),
         })
         .labelled("while")
+        .boxed()
 }
 
-pub fn control_flow_parser<'a, I: TokenInput<'a>>(
-    stmt_parser: impl TokenParser<'a, I, Statement> + Clone,
-) -> impl TokenParser<'a, I, ControlFlow> + Clone {
+pub fn control_flow_parser<'a, I, SP>(
+    stmt_parser: SP,
+) -> impl TokenParser<'a, I, ControlFlow> + Clone
+where
+    I: TokenInput<'a>,
+    SP: TokenParser<'a, I, Statement> + Clone + 'a, {
     choice((
         if_parser(stmt_parser.clone()),
         while_parser(stmt_parser),
@@ -68,10 +74,12 @@ fn return_parser<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, ControlFlow
                 .map_with_span(Spanned)
                 .paddedln()
                 .or_not()
-                .labelled("return-expr"),
+                .labelled("return-expr")
+                .boxed(),
         )
         .map(ControlFlow::Return)
         .labelled("return")
+        .boxed()
 }
 
 pub fn statement_parser<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, Statement> + Clone {
@@ -84,6 +92,6 @@ pub fn statement_parser<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, Stat
         ))
         .paddedln()
     })
-    .boxed()
     .labelled("statement")
+    .boxed()
 }

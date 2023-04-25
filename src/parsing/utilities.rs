@@ -2,6 +2,8 @@ use core::ops::Fn;
 
 use chumsky::span::SimpleSpan;
 
+pub type SourceId = usize;
+
 #[derive(Debug, PartialEq)]
 pub struct Spanned<T>(pub T, pub SimpleSpan<usize>);
 

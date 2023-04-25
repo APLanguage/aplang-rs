@@ -1,8 +1,5 @@
-use chumsky::{
-    prelude::*,
-    Parser,
-};
-use super::{TokenParser, TokenInput};
+use super::parsers::{TokenInput, TokenParser};
+use chumsky::prelude::*;
 use logos::Logos;
 
 #[derive(Logos, Debug, PartialEq, Eq, Clone, Hash)]
@@ -28,14 +25,15 @@ pub enum Identifier {
     #[token("else")]
     Else,
 
+    #[token("use")]
+    Use,
+
     #[regex(".+")]
     Custom,
-
-    #[error]
-    Error,
 }
 
 #[derive(Logos, Debug, PartialEq, Clone)]
+#[logos(skip r"[ \t\f\r]+")]
 pub enum Token {
     #[token("->")]
     ArrowRight,
@@ -144,6 +142,8 @@ pub enum Token {
     Dot,
     #[token(":")]
     Colon,
+    #[token("::")]
+    ColonColon,
     #[token(";")]
     Semicolon,
     #[token(",")]
@@ -161,8 +161,6 @@ pub enum Token {
     #[token("\n")]
     NewLine,
 
-    #[regex(r"[ \t\f\r]+", logos::skip)]
-    #[error]
     Error,
 }
 
@@ -198,13 +196,13 @@ pub enum Operation {
     ShiftRightUnsigned,
 
     Not,
-    Unknown
+    Unknown,
 }
 
 impl From<Token> for Operation {
     fn from(value: Token) -> Self {
-        use Token::*;
         use Operation::*;
+        use Token::*;
         match value {
             Plus => Addition,
             Minus => Substraction,
@@ -241,17 +239,20 @@ impl From<Token> for Operation {
             LessLessEqual => ShiftLeft,
             GreaterGreaterGreaterEqual => ShiftRightUnsigned,
             Bang => Not,
-            _ => Unknown
+            _ => Unknown,
         }
     }
 }
 
-pub fn ident<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, Identifier> + Clone {
+pub fn ident<'a, I: TokenInput<'a>>(
+) -> impl TokenParser<'a, I, Identifier> + Clone {
     select! { Token::Identifier(id) => id }
 }
 
 #[inline]
-pub fn keyword<'a, I: TokenInput<'a>>(id: Identifier) -> impl TokenParser<'a, I, ()> + Clone {
+pub fn keyword<'a, I: TokenInput<'a>>(
+    id: Identifier,
+) -> impl TokenParser<'a, I, ()> + Clone {
     just(Token::Identifier(id)).ignored()
 }
 
