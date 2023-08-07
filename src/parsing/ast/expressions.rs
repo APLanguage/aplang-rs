@@ -1,11 +1,15 @@
 use lasso::Spur;
 
-use crate::{parsing::{
+use crate::{
+    parsing::{
         parsers::{number::NumberLiteralResult, string::StringLiteral},
-        tokenizer::{Identifier, Operation},
+        tokenizer::Operation,
         utilities::Spanned,
-        Infoed, Infoable,
-    }, typing::TypeId, source::DeclarationPath};
+        Infoable, Infoed,
+    },
+    source::DeclarationPath,
+    typing::TypeId,
+};
 
 #[derive(Debug, PartialEq)]
 pub enum CallKind {
@@ -46,7 +50,7 @@ pub enum Expression {
 }
 
 impl Infoable for Expression {
-    type Info = TypeId;    
+    type Info = TypeId;
 }
 
 impl Infoable for CallKind {

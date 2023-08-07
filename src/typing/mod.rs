@@ -4,16 +4,12 @@ use chumsky::span::SimpleSpan;
 use either::Either::{Left, Right};
 use itertools::Itertools;
 use lasso::{Rodeo, Spur};
-use std::{fmt::Debug, matches, num::NonZeroUsize, ops::Range, todo, vec};
+use std::{num::NonZeroUsize, ops::Range};
 
 use crate::{parsing::{
-    ast::{
-        declarations::{Declaration, Variable},
-        expressions::Expression,
-        ParsedType,
-    },
+    ast::ParsedType,
     utilities::Spanned,
-    Infoed, parsers::file::File,
+    parsers::file::File,
 }, source::DeclarationPath};
 
 pub type TypeId = usize;

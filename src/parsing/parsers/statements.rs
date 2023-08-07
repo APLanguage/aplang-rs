@@ -1,8 +1,11 @@
 use chumsky::{prelude::just, primitive::choice, recursive::recursive, Parser};
 
 use crate::parsing::{
-    ast::{statements::{ControlFlow, Statement}, declarations::Declaration},
-    parsers::{expressions::expression_parser, TokenInput, TokenParser},
+    ast::{
+        declarations::Declaration,
+        statements::{ControlFlow, Statement},
+    },
+    parsers::{expressions::expression_parser, CollectBoxedSliceExt, TokenInput, TokenParser},
     tokenizer::{keyword, Identifier, Token},
     utilities::Spanned,
 };
@@ -39,12 +42,28 @@ where
     SP: TokenParser<'a, I, Statement> + Clone, {
     keyword(Identifier::While)
         .ignore_then(
-            expression_parser().delimited_by(just(Token::ParenOpen), just(Token::ParenClosed)),
+            expression_parser()
+                .paddedln()
+                .delimited_by(just(Token::ParenOpen), just(Token::ParenClosed)),
         )
-        .then(stmt_parser.paddedln())
-        .map(|(condition, statement)| ControlFlow::While {
+        .then(choice((
+            stmt_parser
+                .clone()
+                .paddedln()
+                .repeated()
+                .exactly(1)
+                .collect_boxed_slice(),
+            stmt_parser
+                .paddedln()
+                .repeated()
+                .collect_boxed_slice()
+                .delimited_by(just(Token::BraceOpen), just(Token::BraceClosed))
+                .labelled("fn-stmts")
+                .boxed(),
+        )))
+        .map(|(condition, statements)| ControlFlow::While {
             condition,
-            statement: Box::new(statement),
+            statements,
         })
         .labelled("while")
         .boxed()
@@ -85,12 +104,20 @@ fn return_parser<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, ControlFlow
 pub fn statement_parser<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, Statement> + Clone {
     recursive(|p| {
         choice((
-            variable_parser().map(Declaration::Variable).map(Statement::Declaration),
+            variable_parser()
+                .map(Declaration::Variable)
+                .map(Statement::Declaration),
             control_flow_parser(p).map(Statement::ControlFlow),
             expression_parser().map(Statement::Expression),
-            just(Token::Semicolon).map(|_| Statement::None),
         ))
-        .paddedln()
+        .then_ignore(choice((
+            just(Token::NewLine).repeated().ignored(),
+            just(Token::Semicolon).repeated().ignored(),
+            choice((just(Token::BraceClosed), just(Token::ParenClosed)))
+                .rewind()
+                .ignored(),
+        )))
+        .or(just(Token::Semicolon).map(|_| Statement::None))
     })
     .labelled("statement")
     .boxed()

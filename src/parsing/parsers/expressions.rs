@@ -1,8 +1,9 @@
 use chumsky::{
     primitive::{choice, group, just},
     recursive::recursive,
+    select,
     span::SimpleSpan,
-    Parser, select,
+    Parser,
 };
 
 use crate::parsing::{
@@ -60,6 +61,7 @@ where EP: TokenParser<'a, I, Expression> + Clone + 'a {
             .infoed()
             .labelled("assignement_left"),
         ops_parser!(
+            Equal,
             PlusEqual,
             MinusEqual,
             SlashSlashEqual,
@@ -255,18 +257,17 @@ where
                 .paddedln()
                 .then(next_parser.infoed().paddedln())
                 .repeated()
+                .at_least(1)
                 .collect_boxed_slice()
-                .boxed(),
+                .boxed()
+                .or_not(),
         )
-        .map(|(atom, chain)| {
-            if chain.is_empty() {
-                atom.inner // should think of a better way to handle this
-            } else {
-                Expression::Operation {
-                    base: Box::new(atom),
-                    continuation: chain,
-                }
-            }
+        .map(|(atom, chain)| match chain {
+            None => atom.inner,
+            Some(chain) => Expression::Operation {
+                base: Box::new(atom),
+                continuation: chain,
+            },
         })
         .labelled("math")
         .boxed()

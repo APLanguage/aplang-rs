@@ -14,7 +14,7 @@ pub enum ControlFlow {
     },
     While {
         condition: Expression,
-        statement: Box<Statement>,
+        statements: Box<[Statement]>,
     },
     Return(Option<Spanned<Expression>>),
     Break,

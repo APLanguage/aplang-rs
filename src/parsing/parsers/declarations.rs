@@ -1,28 +1,28 @@
 use crate::parsing::{
     ast::{
-        declarations::{Function, Struct, Variable},
+        declarations::{Field, Function, Parameter, Struct, Variable},
         ParsedType,
     },
-    parsers::{expressions::expression_parser, CollectBoxedSliceExt, TokenInput, TokenParser},
+    parsers::{expressions::expression_parser, TokenInput, TokenParser},
     tokenizer::{ident, keyword, Identifier, Token},
     utilities::Spanned,
-    Infoed,
 };
 use chumsky::{
     primitive::{choice, group, just},
     recursive::recursive,
 };
-use lasso::Spur;
 
-use super::{statements::statement_parser, TokenParserExt};
+use super::{statements::statement_parser, CollectBoxedSliceExt, TokenParserExt};
 
-fn field_parser<'a, I: TokenInput<'a>>(
-) -> impl TokenParser<'a, I, (Spanned<Spur>, Infoed<ParsedType>)> {
+fn field_parser<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, Field> {
     group((
-        ident()
-            .spur()
-            .map_with_span(Spanned)
-            .then_ignore(just(Token::Colon).paddedln()),
+        choice((
+            keyword(Identifier::Var).to(true),
+            keyword(Identifier::Val).to(false),
+        ))
+        .map_with_span(Spanned),
+        ident().spur().map_with_span(Spanned),
+        just(Token::Colon).paddedln(),
         type_parser()
             .infoed()
             .paddedln()
@@ -30,6 +30,11 @@ fn field_parser<'a, I: TokenInput<'a>>(
             .boxed(),
     ))
     .labelled("data-field")
+    .map(|(reassignable, name, _, ty)| Field {
+        reassignable,
+        name,
+        ty,
+    })
     .boxed()
 }
 
@@ -69,37 +74,65 @@ pub fn type_parser<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, ParsedTyp
 }
 
 pub fn variable_parser<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, Variable> + Clone {
-    just(Token::Identifier(Identifier::Var))
-        .ignore_then(group((
-            ident().spur().map_with_span(Spanned).paddedln(),
-            just(Token::Colon)
-                .paddedln()
-                .ignore_then(type_parser().infoed().paddedln()),
-            just(Token::Equal)
-                .paddedln()
-                .ignore_then(expression_parser().infoed())
-                .boxed(),
-        )))
-        .map(|(name, ty, expression)| Variable {
-            name,
-            ty,
-            expression,
-        })
-        .paddedln()
-        .labelled("var")
-        .boxed()
+    group((
+        choice((
+            keyword(Identifier::Var).to(true),
+            keyword(Identifier::Val).to(false),
+        ))
+        .map_with_span(Spanned)
+        .labelled("var-modifier"),
+        ident()
+            .spur()
+            .map_with_span(Spanned)
+            .paddedln()
+            .labelled("var-name"),
+        just(Token::Colon)
+            .paddedln()
+            .ignore_then(type_parser().infoed().paddedln().labelled("var-type"))
+            .or_not()
+            .labelled("var-colon-type"),
+        just(Token::Equal).paddedln(),
+        expression_parser()
+            .infoed()
+            .boxed()
+            .labelled("var-expression"),
+    ))
+    .map(|(reassignable, name, ty, _, expression)| Variable {
+        reassignable,
+        name,
+        ty,
+        expression,
+    })
+    .paddedln()
+    .labelled("var")
+    .boxed()
 }
 
-fn parameter_parser<'a, I: TokenInput<'a>>(
-) -> impl TokenParser<'a, I, (Spanned<Spur>, Infoed<ParsedType>)> {
-    ident()
-        .spur()
+fn parameter_parser<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, Parameter> {
+    group((
+        choice((
+            keyword(Identifier::Var).to(true),
+            keyword(Identifier::Val).to(false),
+        ))
         .map_with_span(Spanned)
-        .labelled("fn-param-name")
-        .then_ignore(just(Token::Colon).paddedln())
-        .then(type_parser().infoed().labelled("fn-param-type"))
-        .labelled("fn-param")
-        .boxed()
+        .or_not()
+        .labelled("fn-param-reassignable"),
+        ident()
+            .spur()
+            .map_with_span(Spanned)
+            .labelled("fn-param-name"),
+        just(Token::Colon).paddedln().ignored(),
+        type_parser()
+            .infoed()
+            .labelled("fn-param-type")
+            .labelled("fn-param")
+            .boxed(),
+    ))
+    .map(|(reassignable, name, _, ty)| Parameter {
+        reassignable,
+        name,
+        ty,
+    })
 }
 
 pub fn function_parser<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, Function> {
@@ -111,6 +144,7 @@ pub fn function_parser<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, Funct
                 .paddedln()
                 .labelled("fn-name"),
             parameter_parser()
+                .paddedln()
                 .separated_by(just(Token::Comma))
                 .collect_boxed_slice()
                 .delimited_by(just(Token::ParenOpen), just(Token::ParenClosed))

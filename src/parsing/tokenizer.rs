@@ -38,11 +38,13 @@ pub enum Identifier {
 fn string_parser_callback(lex: &mut Lexer<Token>) -> Option<StringLiteral> {
     let end = lex.source().len();
     let start = lex.span().start;
+    let len = lex.span().end - lex.span().start;
     let (literal, span) = string_parser()
-        .lazy()
         .map_with_span(|t, s| (t, s))
-        .parse(lex.source().slice(start..end).unwrap()).into_output()?;
-    lex.bump(span.end - start);
+        .lazy()
+        .parse(lex.source().slice(start..end).unwrap())
+        .into_output()?;
+    lex.bump(span.end - len);
     Some(literal)
 }
 
@@ -168,7 +170,7 @@ pub enum Token {
 
     #[regex(r"\d[_\w]*(\.\d[_\w]*)?")]
     Number,
-    
+
     // TODO: uplift parsing to parser, for interpolation
     #[regex("r#*\"", string_parser_callback)]
     String(StringLiteral),

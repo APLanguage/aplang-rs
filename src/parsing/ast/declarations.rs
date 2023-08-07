@@ -55,23 +55,38 @@ impl UseDeclaration {
 }
 
 #[derive(Debug)]
+pub struct Field {
+    pub reassignable: Spanned<bool>,
+    pub name: Spanned<Spur>,
+    pub ty: Infoed<ParsedType>,
+}
+
+#[derive(Debug)]
+pub struct Parameter {
+    pub reassignable: Option<Spanned<bool>>,
+    pub name: Spanned<Spur>,
+    pub ty: Infoed<ParsedType>,
+}
+
+#[derive(Debug)]
 pub struct Struct {
     pub name: Spanned<Spur>,
-    pub fields: Box<[NameTypeTuple]>,
+    pub fields: Box<[Field]>,
 }
 
 #[derive(Debug)]
 pub struct Function {
     pub name: Spanned<Spur>,
-    pub parameters: Box<[NameTypeTuple]>,
+    pub parameters: Box<[Parameter]>,
     pub ty: Option<Infoed<ParsedType>>,
     pub statements: Box<[Statement]>,
 }
 
 #[derive(Debug)]
 pub struct Variable {
+    pub reassignable: Spanned<bool>,
     pub name: Spanned<Spur>,
-    pub ty: Infoed<ParsedType>,
+    pub ty: Option<Infoed<ParsedType>>,
     pub expression: Infoed<Expression>,
 }
 

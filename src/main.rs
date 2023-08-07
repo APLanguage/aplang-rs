@@ -3,6 +3,7 @@
 #![feature(trait_alias)]
 #![feature(return_position_impl_trait_in_trait)]
 
+use crate::parsing::parsers::{expressions::expression_parser, file::File};
 use chumsky::{
     error::RichReason,
     input::{Input, Stream},
@@ -10,12 +11,14 @@ use chumsky::{
     primitive::end,
     ParseResult, Parser,
 };
-use crate::parsing::parsers::file::File;
 use indextree::{Arena as IndexArena, NodeId};
 use itertools::Itertools;
 use lasso::{Rodeo, Spur};
 use logos::Logos;
-use parsing::parsers::TokenInput;
+use parsing::{
+    ast::expressions::Expression,
+    parsers::{TokenInput, TokenParser},
+};
 use source::VirtualFile;
 
 use crate::{
@@ -37,9 +40,35 @@ enum PathPartType {
     File,
 }
 
+macro_rules! parse_and_print {
+    ($input: literal, $parser_name:ident) => {{
+        let input: String = $input.to_owned();
+        let mut rodeo = Rodeo::new();
+        let file = &VirtualFile::new(input);
+        let mut state = ParserState::new(&mut rodeo, file);
+        let result = $parser_name()
+            .then_ignore(end())
+            .parse_with_state(tokenize(file.whole_file()), &mut state);
+        println!("{:#?}", result);
+        print_errors(&result, file);
+    }};
+}
+
 fn main() {
     let input: String = r#"
-fn sum(a: i32, b: i32) -> int = a + b
+struct Test {
+    val a: u16,
+    var b: str
+}
+
+fn sum(a: i32, var b: i32, val c: str) -> i32 {
+    val d: str = c + r"o.o"
+    b = 10
+    while(b > 0) {
+        b -= 1
+    }
+    return if (b == 0) a else b
+}
 
 fn main() {
   var result = sum(1, 2)
@@ -54,6 +83,9 @@ fn main() {
     println!("{:#?}", result);
 
     print_errors(&result, file);
+
+    // parse_and_print!(r#"c + r"o.o""#, expression_parser);
+
     let mut module_tree: IndexArena<Spur> = IndexArena::new();
     // module-tree -> package-tree -> files -> declaration tree
     let mut package_tree: IndexArena<(Spur, Option<NodeId>)> = IndexArena::new();
@@ -75,6 +107,16 @@ fn parse_file<'a, S: SourceFile>(
 ) -> ParseResult<File, Rich<'a, Token>> {
     let mut state = ParserState::new(rodeo, input);
     return file_parser()
+        .then_ignore(end())
+        .parse_with_state(tokenize(input.whole_file()), &mut state);
+}
+
+fn parse_expression<'a, S: SourceFile>(
+    rodeo: &'a mut Rodeo,
+    input: &'a S,
+) -> ParseResult<Expression, Rich<'a, Token>> {
+    let mut state = ParserState::new(rodeo, input);
+    return expression_parser()
         .then_ignore(end())
         .parse_with_state(tokenize(input.whole_file()), &mut state);
 }
