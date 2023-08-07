@@ -6,7 +6,7 @@ use chumsky::{
 };
 
 use crate::parsing::{
-    ast::expressions::{Call, CallKind, Expression},
+    ast::expressions::{CallKind, Expression},
     literals::number::parse_complex_number,
     parsers::{CollectBoxedSliceExt, ParserState, TokenInput, TokenParser},
     tokenizer::Identifier,
@@ -24,9 +24,10 @@ macro_rules! ops_parser {
     };
 }
 
-fn call<'a, EP, I: TokenInput<'a>>(expr_parser: EP) -> impl TokenParser<'a, I, Call> + Clone
+fn call<'a, EP, I: TokenInput<'a>>(expr_parser: EP) -> impl TokenParser<'a, I, CallKind> + Clone
 where EP: TokenParser<'a, I, Expression> + Clone + 'a {
     ident()
+        .spur()
         .map_with_span(Spanned)
         .then(
             expr_parser
@@ -46,10 +47,6 @@ where EP: TokenParser<'a, I, Expression> + Clone + 'a {
                 parameters,
             },
             None => CallKind::Identifier(identifier),
-        })
-        .map(|kind| Call {
-            kind,
-            declaration: None,
         })
         .labelled("call")
 }
@@ -150,7 +147,7 @@ where EP: TokenParser<'a, I, Expression> + Clone + 'a {
     choice((
         just(Token::Number)
             .map_with_state(|_, span: SimpleSpan, input: &mut ParserState<'a>| {
-                parse_complex_number(input.slice(span.into()))
+                parse_complex_number(input.slice(span.into()).unwrap())
             })
             .map(Expression::Number)
             .boxed(),

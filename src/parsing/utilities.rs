@@ -5,7 +5,7 @@ use chumsky::span::SimpleSpan;
 pub type SourceId = usize;
 
 #[derive(Debug, PartialEq)]
-pub struct Spanned<T>(pub T, pub SimpleSpan<usize>);
+pub struct Spanned<T>(pub T, pub SimpleSpan);
 
 impl<T> Spanned<T> {
     pub fn map_new<R, F>(&self, mapping: F) -> Spanned<R>

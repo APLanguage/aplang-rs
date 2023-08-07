@@ -1,6 +1,6 @@
 use crate::parsing::{
     ast::{
-        declarations::{Declaration, Function, Struct, Variable},
+        declarations::{Function, Struct, Variable},
         ParsedType,
     },
     parsers::{expressions::expression_parser, CollectBoxedSliceExt, TokenInput, TokenParser},
@@ -11,24 +11,16 @@ use crate::parsing::{
 use chumsky::{
     primitive::{choice, group, just},
     recursive::recursive,
-    span::SimpleSpan,
 };
+use lasso::Spur;
 
 use super::{statements::statement_parser, TokenParserExt};
 
-fn use_parser<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, Box<[&'a str]>> {
-    keyword(Identifier::Use).ignore_then(
-        ident()
-            .map_with_state(|_, s: SimpleSpan, state| state.slice(s.into()))
-            .separated_by(just(Token::ColonColon))
-            .collect_boxed_slice(),
-    )
-}
-
 fn field_parser<'a, I: TokenInput<'a>>(
-) -> impl TokenParser<'a, I, (Spanned<Identifier>, Infoed<ParsedType>)> {
+) -> impl TokenParser<'a, I, (Spanned<Spur>, Infoed<ParsedType>)> {
     group((
         ident()
+            .spur()
             .map_with_span(Spanned)
             .then_ignore(just(Token::Colon).paddedln()),
         type_parser()
@@ -45,6 +37,7 @@ pub fn struct_parser<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, Struct>
     keyword(Identifier::Struct)
         .ignore_then(
             ident()
+                .spur()
                 .map_with_span(Spanned)
                 .paddedln()
                 .labelled("data-identifier"),
@@ -75,10 +68,10 @@ pub fn type_parser<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, ParsedTyp
     .boxed()
 }
 
-pub fn variable_parser<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, Declaration> + Clone {
+pub fn variable_parser<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, Variable> + Clone {
     just(Token::Identifier(Identifier::Var))
         .ignore_then(group((
-            ident().map_with_span(Spanned).paddedln(),
+            ident().spur().map_with_span(Spanned).paddedln(),
             just(Token::Colon)
                 .paddedln()
                 .ignore_then(type_parser().infoed().paddedln()),
@@ -87,12 +80,10 @@ pub fn variable_parser<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, Decla
                 .ignore_then(expression_parser().infoed())
                 .boxed(),
         )))
-        .map(|(name, ty, expression)| {
-            Declaration::Variable(Variable {
-                name,
-                ty,
-                expression,
-            })
+        .map(|(name, ty, expression)| Variable {
+            name,
+            ty,
+            expression,
         })
         .paddedln()
         .labelled("var")
@@ -100,8 +91,9 @@ pub fn variable_parser<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, Decla
 }
 
 fn parameter_parser<'a, I: TokenInput<'a>>(
-) -> impl TokenParser<'a, I, (Spanned<Identifier>, Infoed<ParsedType>)> {
+) -> impl TokenParser<'a, I, (Spanned<Spur>, Infoed<ParsedType>)> {
     ident()
+        .spur()
         .map_with_span(Spanned)
         .labelled("fn-param-name")
         .then_ignore(just(Token::Colon).paddedln())
@@ -110,10 +102,11 @@ fn parameter_parser<'a, I: TokenInput<'a>>(
         .boxed()
 }
 
-pub fn function_parser<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, Declaration> {
+pub fn function_parser<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, Function> {
     keyword(Identifier::Fn)
         .ignore_then(group((
             ident()
+                .spur()
                 .map_with_span(Spanned)
                 .paddedln()
                 .labelled("fn-name"),
@@ -138,13 +131,11 @@ pub fn function_parser<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, Decla
                 .labelled("fn-stmts")
                 .boxed(),
         )))
-        .map(|(name, parameters, ty, statements)| {
-            Declaration::Function(Function {
-                name,
-                parameters,
-                ty,
-                statements,
-            })
+        .map(|(name, parameters, ty, statements)| Function {
+            name,
+            parameters,
+            ty,
+            statements,
         })
         .paddedln()
         .labelled("function")

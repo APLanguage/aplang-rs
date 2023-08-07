@@ -1,26 +1,19 @@
-use crate::{
-    parsing::{
+use lasso::Spur;
+
+use crate::{parsing::{
         literals::number::NumberLiteralResult,
-        tokenizer::{Identifier, Operation},
+        tokenizer::Operation,
         utilities::Spanned,
-        Infoed,
-    },
-    typing::NodePath,
-};
+        Infoed, Infoable,
+    }, typing::TypeId, source::DeclarationPath};
 
 #[derive(Debug, PartialEq)]
 pub enum CallKind {
-    Identifier(Spanned<Identifier>),
+    Identifier(Spanned<Spur>),
     Call {
-        identifier: Spanned<Identifier>,
+        identifier: Spanned<Spur>,
         parameters: Box<[Infoed<Expression>]>,
     },
-}
-
-#[derive(Debug, PartialEq)]
-pub struct Call {
-    pub kind: CallKind,
-    pub declaration: Option<NodePath>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -34,15 +27,15 @@ pub enum Expression {
     StringLiteral(String),
     CallChain {
         expression: Box<Infoed<Expression>>,
-        calls: Box<[Infoed<Call>]>,
+        calls: Box<[Infoed<CallKind>]>,
     },
-    Call(Call),
+    Call(CallKind),
     Operation {
         base: Box<Infoed<Expression>>,
         continuation: Box<[(Spanned<Operation>, Infoed<Expression>)]>,
     },
     Assignement {
-        call: Infoed<Call>,
+        call: Infoed<CallKind>,
         op: Spanned<Operation>,
         expression: Box<Infoed<Expression>>,
     },
@@ -50,4 +43,12 @@ pub enum Expression {
         ops: Box<[Spanned<Operation>]>,
         expression: Box<Infoed<Expression>>,
     },
+}
+
+impl Infoable for Expression {
+    type Info = TypeId;    
+}
+
+impl Infoable for CallKind {
+    type Info = DeclarationPath;
 }

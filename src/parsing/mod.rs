@@ -1,8 +1,6 @@
 use chumsky::span::SimpleSpan;
 
-use crate::typing::{NodePath, TypeId};
-
-use self::utilities::SourceId;
+use crate::{typing::TypeId, source::DeclarationPath};
 
 pub mod ast;
 pub mod literals;
@@ -11,23 +9,21 @@ pub mod tokenizer;
 pub mod utilities;
 
 #[derive(Debug, PartialEq)]
-pub struct Infoed<T> {
+pub struct Infoed<T: Infoable> {
     pub inner: T,
-    pub info: Option<Info>,
-    pub loc: Location,
+    pub info: Option<T::Info>,
+    pub span: SimpleSpan
 }
 
-#[derive(Debug, PartialEq)]
-pub struct Location {
-    pub span: SimpleSpan,
-    pub source_id: Option<SourceId>,
+pub trait Infoable {
+    type Info;
 }
 
 #[derive(Debug, PartialEq)]
 pub enum DeclarationRef {
     LocalVariable(usize),
-    GlobalVariable(NodePath),
-    Function(NodePath),
+    GlobalVariable(DeclarationPath),
+    Function(DeclarationPath),
 }
 
 #[derive(Debug, PartialEq)]

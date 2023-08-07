@@ -1,7 +1,7 @@
 use chumsky::{prelude::just, primitive::choice, recursive::recursive, Parser};
 
 use crate::parsing::{
-    ast::statements::{ControlFlow, Statement},
+    ast::{statements::{ControlFlow, Statement}, declarations::Declaration},
     parsers::{expressions::expression_parser, TokenInput, TokenParser},
     tokenizer::{keyword, Identifier, Token},
     utilities::Spanned,
@@ -85,7 +85,7 @@ fn return_parser<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, ControlFlow
 pub fn statement_parser<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, Statement> + Clone {
     recursive(|p| {
         choice((
-            variable_parser().map(Statement::Declaration),
+            variable_parser().map(Declaration::Variable).map(Statement::Declaration),
             control_flow_parser(p).map(Statement::ControlFlow),
             expression_parser().map(Statement::Expression),
             just(Token::Semicolon).map(|_| Statement::None),
