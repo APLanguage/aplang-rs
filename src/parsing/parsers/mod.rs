@@ -17,6 +17,8 @@ pub mod declarations;
 pub mod expressions;
 pub mod file;
 pub mod statements;
+pub mod number;
+pub mod string;
 
 pub struct ParserState<'a> {
     source: &'a dyn SourceFile,

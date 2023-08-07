@@ -1,8 +1,8 @@
 use lasso::Spur;
 
 use crate::{parsing::{
-        literals::number::NumberLiteralResult,
-        tokenizer::Operation,
+        parsers::{number::NumberLiteralResult, string::StringLiteral},
+        tokenizer::{Identifier, Operation},
         utilities::Spanned,
         Infoed, Infoable,
     }, typing::TypeId, source::DeclarationPath};
@@ -24,7 +24,7 @@ pub enum Expression {
         other: Box<Infoed<Expression>>,
     },
     Number(NumberLiteralResult),
-    StringLiteral(String),
+    StringLiteral(StringLiteral),
     CallChain {
         expression: Box<Infoed<Expression>>,
         calls: Box<[Infoed<CallKind>]>,

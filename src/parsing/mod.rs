@@ -3,7 +3,6 @@ use chumsky::span::SimpleSpan;
 use crate::{typing::TypeId, source::DeclarationPath};
 
 pub mod ast;
-pub mod literals;
 pub mod parsers;
 pub mod tokenizer;
 pub mod utilities;

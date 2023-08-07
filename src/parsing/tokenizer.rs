@@ -1,6 +1,9 @@
-use super::parsers::{TokenInput, TokenParser};
+use super::parsers::{
+    string::{string_parser, StringLiteral},
+    TokenInput, TokenParser,
+};
 use chumsky::prelude::*;
-use logos::Logos;
+use logos::{Lexer, Logos, Source};
 
 #[derive(Logos, Debug, PartialEq, Eq, Clone, Hash)]
 pub enum Identifier {
@@ -30,6 +33,17 @@ pub enum Identifier {
 
     #[regex(".+")]
     Custom,
+}
+
+fn string_parser_callback(lex: &mut Lexer<Token>) -> Option<StringLiteral> {
+    let end = lex.source().len();
+    let start = lex.span().start;
+    let (literal, span) = string_parser()
+        .lazy()
+        .map_with_span(|t, s| (t, s))
+        .parse(lex.source().slice(start..end).unwrap()).into_output()?;
+    lex.bump(span.end - start);
+    Some(literal)
 }
 
 #[derive(Logos, Debug, PartialEq, Clone)]
@@ -154,9 +168,10 @@ pub enum Token {
 
     #[regex(r"\d[_\w]*(\.\d[_\w]*)?")]
     Number,
-
-    #[regex("\"[^\"]+\"")]
-    String,
+    
+    // TODO: uplift parsing to parser, for interpolation
+    #[regex("r#*\"", string_parser_callback)]
+    String(StringLiteral),
 
     #[token("\n")]
     NewLine,
@@ -244,15 +259,12 @@ impl From<Token> for Operation {
     }
 }
 
-pub fn ident<'a, I: TokenInput<'a>>(
-) -> impl TokenParser<'a, I, Identifier> + Clone {
+pub fn ident<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, Identifier> + Clone {
     select! { Token::Identifier(id) => id }
 }
 
 #[inline]
-pub fn keyword<'a, I: TokenInput<'a>>(
-    id: Identifier,
-) -> impl TokenParser<'a, I, ()> + Clone {
+pub fn keyword<'a, I: TokenInput<'a>>(id: Identifier) -> impl TokenParser<'a, I, ()> + Clone {
     just(Token::Identifier(id)).ignored()
 }
 
