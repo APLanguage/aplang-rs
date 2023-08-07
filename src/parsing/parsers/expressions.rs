@@ -2,12 +2,12 @@ use chumsky::{
     primitive::{choice, group, just},
     recursive::recursive,
     span::SimpleSpan,
-    Parser,
+    Parser, select,
 };
 
 use crate::parsing::{
     ast::expressions::{Call, CallKind, Expression},
-    literals::number::parse_complex_number,
+    parsers::number::parse_complex_number,
     parsers::{CollectBoxedSliceExt, ParserState, TokenInput, TokenParser},
     tokenizer::Identifier,
     tokenizer::{ident, keyword, Operation, Token},
@@ -155,6 +155,8 @@ where EP: TokenParser<'a, I, Expression> + Clone + 'a {
             .map(Expression::Number)
             .boxed(),
         call(expr_parser.clone()).map(Expression::Call),
+        // TODO: uplift parsing to parser, for interpolation
+        select! { Token::String(literal) => Expression::StringLiteral(literal) },
         expr_parser
             .clone()
             .delimited_by(just(Token::ParenOpen), just(Token::ParenClosed)),

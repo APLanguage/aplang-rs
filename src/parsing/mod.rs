@@ -5,7 +5,6 @@ use crate::typing::{NodePath, TypeId};
 use self::utilities::SourceId;
 
 pub mod ast;
-pub mod literals;
 pub mod parsers;
 pub mod tokenizer;
 pub mod utilities;
