@@ -2,11 +2,11 @@ use chumsky::{
     extra::Full,
     input::{SliceInput, ValueInput},
     prelude::Cheap,
-    primitive::{any, choice, just},
+    primitive::{any, custom, just},
     span::SimpleSpan,
     ConfigIterParser, IterParser, Parser,
 };
-use lasso::{Spur, Rodeo};
+use lasso::Rodeo;
 
 use crate::parsing::ast::expressions::StringLiteral;
 
@@ -59,7 +59,9 @@ pub fn string_parser<'a>(
                         .and_is(end.not())
                         .repeated()
                         .slice()
-                        .map(|s: &'a str| UnlassoedStringLiteral::Raw(s.to_owned()))
+                        .map(|s: &'a str| {
+                            UnlassoedStringLiteral::Raw(s.to_owned().replace("\r\n", "\n"))
+                        })
                         .then_ignore(end),
                 )
         }
