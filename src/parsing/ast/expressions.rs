@@ -2,7 +2,7 @@ use lasso::Spur;
 
 use crate::{
     parsing::{
-        parsers::{number::NumberLiteralResult, string::StringLiteral},
+        parsers::number::NumberLiteralResult,
         tokenizer::Operation,
         utilities::Spanned,
         Infoable, Infoed,
@@ -18,6 +18,11 @@ pub enum CallKind {
         identifier: Spanned<Spur>,
         parameters: Box<[Infoed<Expression>]>,
     },
+}
+
+#[derive(Debug, PartialEq)]
+pub enum StringLiteral {
+    Raw(Spur)
 }
 
 #[derive(Debug, PartialEq)]

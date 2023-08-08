@@ -154,8 +154,17 @@ where EP: TokenParser<'a, I, Expression> + Clone + 'a {
             .map(Expression::Number)
             .boxed(),
         call(expr_parser.clone()).map(Expression::Call),
-        // TODO: uplift parsing to parser, for interpolation
-        select! { Token::String(literal) => Expression::StringLiteral(literal) },
+        select! { Token::String(literal_type) => literal_type }
+            .map_with_state(
+                |literal_type, span: SimpleSpan, input: &mut ParserState<'a>| {
+                    string_parser(literal_type)
+                        .parse(input.slice(span.into()).unwrap())
+                        .into_output()
+                        .unwrap()
+                        .into_lassoed(input.rodeo)
+                },
+            )
+            .map(Expression::StringLiteral),
         expr_parser
             .clone()
             .delimited_by(just(Token::ParenOpen), just(Token::ParenClosed)),
@@ -197,7 +206,7 @@ pub fn expression_parser<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, Exp
 
 use paste::paste;
 
-use super::TokenParserExt;
+use super::{string::string_parser, TokenParserExt};
 macro_rules! binary_parser {
     ($name: ident, $next_name: ident, $ops:expr) => {
         paste! {
