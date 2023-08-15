@@ -3,7 +3,6 @@ pub mod files;
 use std::{io::Read, path::Path};
 
 use anyhow::Result;
-use serde::Deserialize;
 
 use crate::parsing::{
     ast::declarations::{Declaration, Variable},
@@ -13,7 +12,6 @@ use chumsky::{prelude::Rich, primitive::end, span::SimpleSpan, Parser};
 use lasso::{Rodeo, Spur};
 use slotmap::{new_key_type, SlotMap};
 use thiserror::Error;
-use toml::Table;
 
 use crate::{
     parsing::{
@@ -78,7 +76,7 @@ pub struct Files {
 }
 
 impl Files {
-    pub fn file_by_id(&self, file_id: FileId) -> Option<&Box<dyn File>>{
+    pub fn file_by_id(&self, file_id: FileId) -> Option<&Box<dyn File>> {
         self.files.get(file_id)
     }
 }

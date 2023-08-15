@@ -25,7 +25,7 @@ macro_rules! ops_parser {
     };
 }
 
-fn call<'a, EP, I: TokenInput<'a>>(expr_parser: EP) -> impl TokenParser<'a, I, CallKind> + Clone
+pub fn call<'a, EP, I: TokenInput<'a>>(expr_parser: EP) -> impl TokenParser<'a, I, CallKind> + Clone
 where EP: TokenParser<'a, I, Expression> + Clone + 'a {
     ident()
         .spur()
@@ -52,7 +52,7 @@ where EP: TokenParser<'a, I, Expression> + Clone + 'a {
         .labelled("call")
 }
 
-fn assignment<'a, EP, I: TokenInput<'a>>(
+pub fn assignment<'a, EP, I: TokenInput<'a>>(
     expr_parser: EP,
 ) -> impl TokenParser<'a, I, Expression> + Clone
 where EP: TokenParser<'a, I, Expression> + Clone + 'a {
@@ -91,7 +91,7 @@ where EP: TokenParser<'a, I, Expression> + Clone + 'a {
     .labelled("assignement")
 }
 
-fn if_expr_parser<'a, EP, I: TokenInput<'a>>(
+pub fn if_expr_parser<'a, EP, I: TokenInput<'a>>(
     expr_parser: EP,
 ) -> impl TokenParser<'a, I, Expression> + Clone
 where EP: TokenParser<'a, I, Expression> + Clone + 'a {
@@ -210,7 +210,7 @@ use super::{string::string_parser, TokenParserExt};
 macro_rules! binary_parser {
     ($name: ident, $next_name: ident, $ops:expr) => {
         paste! {
-            fn  [< $name _parser >] <'a, EP, I: TokenInput<'a>>(expr_parser: EP) -> impl TokenParser<'a, I, Expression> + Clone
+            pub fn  [< $name _parser >] <'a, EP, I: TokenInput<'a>>(expr_parser: EP) -> impl TokenParser<'a, I, Expression> + Clone
             where
                 EP: TokenParser<'a, I, Expression> + Clone + 'a,
             {

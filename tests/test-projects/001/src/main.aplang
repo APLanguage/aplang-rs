@@ -6,5 +6,5 @@ struct Person {
 fn main() {
     println(r"Hello World!")
     val person = Person(r"Amejonah", 42)
-    println(r"Hello " + person.name + ", age " + str(person.age))
+    println(r"Hello " + person.name + r", age " + str(person.age))
 }

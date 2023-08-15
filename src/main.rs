@@ -6,7 +6,7 @@
 use std::{cell::RefCell, path::Path, rc::Rc};
 
 use crate::{
-    parsing::parsers::{expressions::expression_parser, file::File},
+    parsing::parsers::{expressions::expression_parser, file::File, TokenParser, TokenInput},
     project::{read_workspace, ReadWorkspaceError},
     source::RefVirtualFile,
 };
@@ -27,11 +27,12 @@ use project::ReadWorkspaceResult;
 use slotmap::{new_key_type, SlotMap};
 use source::VirtualFile;
 use thiserror::__private::PathAsDisplay;
+use logos::Logos;
 
 use crate::{
     parsing::{
         ast::declarations::UseDeclaration,
-        parsers::{file::file_parser, ParserState},
+        parsers::{file::file_parser, ParserState, expressions::*},
         tokenizer::Token,
     },
     source::SourceFile,
@@ -52,13 +53,14 @@ macro_rules! parse_and_print {
     ($input: literal, $parser_name:ident) => {{
         let input: String = $input.to_owned();
         let mut rodeo = Rodeo::new();
-        let file = &VirtualFile::new(input);
+        let file = &VirtualFile::new(input.clone());
         let mut state = ParserState::new(&mut rodeo, file);
         let result = $parser_name()
             .then_ignore(end())
             .parse_with_state(tokenize(file.whole_file()), &mut state);
         println!("{:#?}", result);
         print_errors(&result, file);
+        println!("{:?}", Token::lexer(&input).collect::<Vec<_>>());
     }};
 }
 
@@ -107,27 +109,6 @@ impl ModuleTree {
 }
 
 fn main() {
-    let input: String = r#"
-struct Test {
-    val a: u16,
-    var b: str
-}
-
-fn sum(a: i32, var b: i32, val c: str) -> i32 {
-    val d: str = c + r"o.o"
-    b = 10
-    while(b > 0) {
-        b -= 1
-    }
-    return if (b == 0) a else b
-}
-
-fn main() {
-  var result = sum(1, 2)
-  print(result)
-}
-    "#
-    .to_owned();
     let mut rodeo = Rodeo::new();
     // let file = &VirtualFile::new(input);
     // let result = parse_file(&mut rodeo, file);
@@ -183,6 +164,11 @@ fn main() {
     //         .map(|tok| tok.unwrap_or(Token::Error))
     //         .collect::<Vec<Token>>()
     // );
+    // println!("----------------------------------------");
+    // fn test_parser<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, Expression> {
+    //     logic_parser(expression_parser())
+    // }
+    // parse_and_print!(r###"r"Hello " + ", age " + str(person.age)"""###, test_parser)
 }
 
 fn parse_file<'a, S: SourceFile>(
