@@ -2,7 +2,7 @@ use super::parsers::{
     string::{string_literal_outline_parser, StringLiteralType},
     TokenInput, TokenParser,
 };
-use chumsky::prelude::*;
+use chumsky::{prelude::*, input::Stream};
 use logos::{Lexer, Logos, Source};
 
 #[derive(Logos, Debug, PartialEq, Eq, Clone, Hash)]
@@ -272,4 +272,13 @@ pub fn keyword<'a, I: TokenInput<'a>>(id: Identifier) -> impl TokenParser<'a, I,
 #[inline]
 pub fn newline<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, ()> + Clone {
     any().filter(|t| matches!(t, Token::NewLine)).ignored()
+}
+
+pub fn tokenize(input: &str) -> impl TokenInput<'_> {
+    Stream::from_iter(
+        Token::lexer(input)
+            .spanned()
+            .map(|(tok, span)| (tok.unwrap_or(Token::Error), span.into())),
+    )
+    .spanned((input.len()..input.len()).into())
 }

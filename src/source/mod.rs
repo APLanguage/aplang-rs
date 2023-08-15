@@ -28,6 +28,26 @@ impl SourceFile for VirtualFile {
     }
 }
 
+pub struct RefVirtualFile<'a> {
+    source: &'a str
+}
+
+impl <'a> RefVirtualFile<'a> {
+    pub fn new(source: &'a str) -> Self {
+        Self { source }
+    }
+}
+
+impl <'a> SourceFile for RefVirtualFile<'a> {
+    fn read_range(&self, range: Range<usize>) -> Option<&str> {
+        self.source.slice(range)
+    }
+
+    fn whole_file(&self) -> &str {
+        self.source
+    }
+}
+
 #[derive(PartialEq, Eq, PartialOrd, Ord, Copy, Clone, Debug, Hash)]
 pub struct DeclarationPath {
     module_id: NodeId,

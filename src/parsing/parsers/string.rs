@@ -2,7 +2,7 @@ use chumsky::{
     extra::Full,
     input::{SliceInput, ValueInput},
     prelude::Cheap,
-    primitive::{any, custom, just},
+    primitive::{any, just},
     span::SimpleSpan,
     ConfigIterParser, IterParser, Parser,
 };

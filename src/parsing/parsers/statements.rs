@@ -39,7 +39,7 @@ where
 pub fn while_parser<'a, I, SP>(stmt_parser: SP) -> impl TokenParser<'a, I, ControlFlow> + Clone
 where
     I: TokenInput<'a>,
-    SP: TokenParser<'a, I, Statement> + Clone, {
+    SP: TokenParser<'a, I, Statement> + Clone + 'a, {
     keyword(Identifier::While)
         .ignore_then(
             expression_parser()

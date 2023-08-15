@@ -1,0 +1,10 @@
+struct Person {
+    val name: str,
+    val age: u8
+}
+
+fn main() {
+    println(r"Hello World!")
+    val person = Person(r"Amejonah", 42)
+    println(r"Hello " + person.name + ", age " + str(person.age))
+}

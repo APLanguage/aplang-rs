@@ -3,10 +3,15 @@
 #![feature(trait_alias)]
 #![feature(return_position_impl_trait_in_trait)]
 
-use crate::parsing::parsers::{expressions::expression_parser, file::File};
+use std::{cell::RefCell, path::Path, rc::Rc};
+
+use crate::{
+    parsing::parsers::{expressions::expression_parser, file::File},
+    project::{read_workspace, ReadWorkspaceError},
+    source::RefVirtualFile,
+};
 use chumsky::{
     error::RichReason,
-    input::{Input, Stream},
     prelude::Rich,
     primitive::end,
     ParseResult, Parser,
@@ -14,23 +19,26 @@ use chumsky::{
 use indextree::{Arena as IndexArena, NodeId};
 use itertools::Itertools;
 use lasso::{Rodeo, Spur};
-use logos::Logos;
 use parsing::{
     ast::expressions::Expression,
-    parsers::{TokenInput, TokenParser},
+    tokenizer::tokenize,
 };
+use project::ReadWorkspaceResult;
+use slotmap::{new_key_type, SlotMap};
 use source::VirtualFile;
+use thiserror::__private::PathAsDisplay;
 
 use crate::{
     parsing::{
         ast::declarations::UseDeclaration,
-        parsers::{file::file_parser, ParserState, TokenParserExt},
+        parsers::{file::file_parser, ParserState},
         tokenizer::Token,
     },
     source::SourceFile,
 };
 
 pub mod parsing;
+pub mod project;
 pub mod source;
 pub mod typing;
 
@@ -52,6 +60,50 @@ macro_rules! parse_and_print {
         println!("{:#?}", result);
         print_errors(&result, file);
     }};
+}
+
+struct FileTree {}
+
+new_key_type! { struct ModuleSlotMapId; }
+
+struct ModuleInfo {
+    name: Spur,
+    files: FileTree,
+}
+
+struct ModuleTree {
+    modules: SlotMap<ModuleSlotMapId, ModuleInfo>,
+    tree: IndexArena<ModuleSlotMapId>,
+}
+
+enum ModuleId {
+    SlotMapId(ModuleSlotMapId),
+    IndexArenaId(NodeId),
+}
+
+enum ThingId {
+    Module(ModuleId),
+}
+
+impl ModuleTree {
+    fn get_module(&self, module_id: ModuleId) -> Option<&ModuleInfo> {
+        match module_id {
+            ModuleId::SlotMapId(id) => self.modules.get(id),
+            ModuleId::IndexArenaId(id) => {
+                self.tree.get(id).and_then(|id| self.modules.get(*id.get()))
+            }
+        }
+    }
+
+    fn get_module_mut(&mut self, module_id: ModuleId) -> Option<&mut ModuleInfo> {
+        match module_id {
+            ModuleId::SlotMapId(id) => self.modules.get_mut(id),
+            ModuleId::IndexArenaId(id) => self
+                .tree
+                .get_mut(id)
+                .and_then(|id| self.modules.get_mut(*id.get())),
+        }
+    }
 }
 
 fn main() {
@@ -77,28 +129,60 @@ fn main() {
     "#
     .to_owned();
     let mut rodeo = Rodeo::new();
-    let file = &VirtualFile::new(input);
-    let result = parse_file(&mut rodeo, file);
+    // let file = &VirtualFile::new(input);
+    // let result = parse_file(&mut rodeo, file);
 
-    println!("{:#?}", result);
+    // println!("{:#?}", result);
 
-    print_errors(&result, file);
+    // print_errors(&result, file);
 
-    // parse_and_print!(r#"c + r"o.o""#, expression_parser);
-
-    let mut module_tree: IndexArena<Spur> = IndexArena::new();
-    // module-tree -> package-tree -> files -> declaration tree
-    let mut package_tree: IndexArena<(Spur, Option<NodeId>)> = IndexArena::new();
-    if let Some(file_ast) = result.into_output() {
-        // print_uses(uses, &file);
+    match read_workspace(&mut rodeo, Path::new("./tests/test-projects/001")) {
+        ReadWorkspaceResult::ErrFile(e) => println!("{:#?}", e),
+        ReadWorkspaceResult::ErrProject(e, files) => {
+            if let Ok(project_error) = e.downcast::<ReadWorkspaceError>() {
+                match project_error {
+                    ReadWorkspaceError::NoWorkspaceFile => println!("No aplang.toml found!"),
+                    ReadWorkspaceError::ParseErrors(errs) => {
+                        for (file_id, error) in errs {
+                            let mut colors = ariadne::ColorGenerator::new();
+                            // Generate & choose some colours for each of our elements
+                            let file = files.file_by_id(file_id).unwrap();
+                            let input_name = file.path().as_display().to_string();
+                            ariadne::Report::build(
+                                ariadne::ReportKind::Error,
+                                &input_name,
+                                error.span().into_range().start,
+                            )
+                            .with_message(match error.reason() {
+                                RichReason::ExpectedFound { .. } => "Unexpected",
+                                RichReason::Custom(_) => "Custom",
+                                RichReason::Many(_) => "Mnay",
+                            })
+                            .with_label(
+                                ariadne::Label::new((&input_name, error.span().into_range()))
+                                    .with_message(format!("{error:?}"))
+                                    .with_color(colors.next()),
+                            )
+                            .finish()
+                            .print((
+                                &input_name,
+                                ariadne::Source::from(file.src()),
+                            ))
+                            .unwrap();
+                        }
+                    }
+                }
+            }
+        }
+        ReadWorkspaceResult::Ok(_) => println!("Yay"),
     }
 
-    println!(
-        "{:?}",
-        Token::lexer(file.whole_file())
-            .map(|tok| tok.unwrap_or(Token::Error))
-            .collect::<Vec<Token>>()
-    );
+    // println!(
+    //     "{:?}",
+    //     Token::lexer(file.whole_file())
+    //         .map(|tok| tok.unwrap_or(Token::Error))
+    //         .collect::<Vec<Token>>()
+    // );
 }
 
 fn parse_file<'a, S: SourceFile>(
@@ -135,16 +219,7 @@ fn print_uses(uses: Box<[UseDeclaration]>, file: &VirtualFile) {
         });
 }
 
-fn tokenize(input: &str) -> impl TokenInput<'_> {
-    Stream::from_iter(
-        Token::lexer(input)
-            .spanned()
-            .map(|(tok, span)| (tok.unwrap_or(Token::Error), span.into())),
-    )
-    .spanned((input.len()..input.len()).into())
-}
-
-fn print_errors<R>(result: &ParseResult<R, Rich<Token>>, file: &VirtualFile) {
+fn print_errors<R>(result: &ParseResult<R, Rich<Token>>, file: &dyn SourceFile) {
     use ariadne::{ColorGenerator, Label, Report, ReportKind, Source};
 
     let mut colors = ColorGenerator::new();

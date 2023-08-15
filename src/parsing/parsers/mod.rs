@@ -16,8 +16,8 @@ use super::{
 pub mod declarations;
 pub mod expressions;
 pub mod file;
-pub mod statements;
 pub mod number;
+pub mod statements;
 pub mod string;
 
 pub struct ParserState<'a> {
@@ -43,7 +43,11 @@ impl<'a> ParserState<'a> {
 
 pub type TokenParserExtra<'a> = Full<Rich<'a, Token>, ParserState<'a>, ()>;
 pub trait TokenInput<'a> = ValueInput<'a, Token = Token, Span = SimpleSpan>;
-pub trait TokenParser<'a, I: TokenInput<'a>, O> = Parser<'a, I, O, TokenParserExtra<'a>> + Clone;
+pub trait TokenParser<'a, I: TokenInput<'a>, O>:
+    Parser<'a, I, O, TokenParserExtra<'a>> + Clone {
+}
+
+impl<'a, I: TokenInput<'a>, O, T> TokenParser<'a, I, O> for T where T: Parser<'a, I, O, TokenParserExtra<'a>> + Clone {}
 
 pub trait CollectBoxedSliceExt<'a, I, O>:
     IterParser<'a, I, O, TokenParserExtra<'a>> + Clone
@@ -70,7 +74,7 @@ where
         self.map_with_state(|t, span, _state| Infoed {
             inner: t,
             info: None,
-            span
+            span,
         })
     }
 

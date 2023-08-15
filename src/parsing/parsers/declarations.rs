@@ -9,7 +9,7 @@ use crate::parsing::{
 };
 use chumsky::{
     primitive::{choice, group, just},
-    recursive::recursive,
+    recursive::recursive, Parser,
 };
 
 use super::{statements::statement_parser, CollectBoxedSliceExt, TokenParserExt};

@@ -16,6 +16,7 @@ use crate::parsing::{
     },
     tokenizer::{ident, keyword, newline, Identifier, Token},
 };
+
 pub type File = (Box<[UseDeclaration]>, Box<[Declaration]>);
 
 pub fn file_parser<'a, I: TokenInput<'a>>(
