@@ -31,8 +31,8 @@ new_key_type! { pub struct FileId; }
 new_key_type! { pub struct ModuleId; }
 
 pub struct Workspace {
-    project: Project,
-    aplang_file: APLangWorkspaceFile,
+    pub project: Project,
+    pub aplang_file: APLangWorkspaceFile,
 }
 
 pub struct DeclarationInfo<D> {
@@ -41,9 +41,9 @@ pub struct DeclarationInfo<D> {
 }
 
 pub struct DeclarationPool {
-    functions: SlotMap<FunctionId, DeclarationInfo<Function>>,
-    structs: SlotMap<StructId, DeclarationInfo<Struct>>,
-    variables: SlotMap<VariableId, DeclarationInfo<Variable>>,
+    pub functions: SlotMap<FunctionId, DeclarationInfo<Function>>,
+    pub structs: SlotMap<StructId, DeclarationInfo<Struct>>,
+    pub variables: SlotMap<VariableId, DeclarationInfo<Variable>>,
 }
 
 pub trait File {
@@ -72,7 +72,7 @@ enum FileOrFolder {
 }
 
 pub struct Files {
-    files: SlotMap<FileId, Box<dyn File>>,
+    pub files: SlotMap<FileId, Box<dyn File>>,
 }
 
 impl Files {
@@ -82,21 +82,21 @@ impl Files {
 }
 
 pub struct Project {
-    src: AstFiles,
-    pool: DeclarationPool,
-    files: Files,
+    pub src: AstFiles,
+    pub pool: DeclarationPool,
+    pub files: Files,
 }
 
 pub struct AstFiles {
-    files: SlotMap<ModuleId, ModuleData>,
+    pub files: SlotMap<ModuleId, ModuleData>,
 }
 
 pub struct ModuleData {
-    imports: Box<[UseDeclaration]>,
-    functions: Vec<(Spur, FunctionId)>,
-    structs: Vec<(Spur, StructId)>,
-    variables: Vec<(Spur, VariableId)>,
-    file_id: FileId,
+    pub imports: Box<[UseDeclaration]>,
+    pub functions: Vec<(Spur, FunctionId)>,
+    pub structs: Vec<(Spur, StructId)>,
+    pub variables: Vec<(Spur, VariableId)>,
+    pub file_id: FileId,
 }
 
 #[derive(Debug, Error)]

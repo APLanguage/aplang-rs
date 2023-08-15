@@ -6,33 +6,25 @@
 use std::{cell::RefCell, path::Path, rc::Rc};
 
 use crate::{
-    parsing::parsers::{expressions::expression_parser, file::File, TokenParser, TokenInput},
+    parsing::parsers::{expressions::expression_parser, file::File, TokenInput, TokenParser},
     project::{read_workspace, ReadWorkspaceError},
     source::RefVirtualFile,
 };
-use chumsky::{
-    error::RichReason,
-    prelude::Rich,
-    primitive::end,
-    ParseResult, Parser,
-};
+use chumsky::{error::RichReason, prelude::Rich, primitive::end, ParseResult, Parser};
 use indextree::{Arena as IndexArena, NodeId};
 use itertools::Itertools;
 use lasso::{Rodeo, Spur};
-use parsing::{
-    ast::expressions::Expression,
-    tokenizer::tokenize,
-};
+use logos::Logos;
+use parsing::{ast::expressions::Expression, tokenizer::tokenize};
 use project::ReadWorkspaceResult;
 use slotmap::{new_key_type, SlotMap};
 use source::VirtualFile;
 use thiserror::__private::PathAsDisplay;
-use logos::Logos;
 
 use crate::{
     parsing::{
         ast::declarations::UseDeclaration,
-        parsers::{file::file_parser, ParserState, expressions::*},
+        parsers::{expressions::*, file::file_parser, ParserState},
         tokenizer::Token,
     },
     source::SourceFile,
@@ -137,7 +129,7 @@ fn main() {
                             .with_message(match error.reason() {
                                 RichReason::ExpectedFound { .. } => "Unexpected",
                                 RichReason::Custom(_) => "Custom",
-                                RichReason::Many(_) => "Mnay",
+                                RichReason::Many(_) => "Many",
                             })
                             .with_label(
                                 ariadne::Label::new((&input_name, error.span().into_range()))
@@ -145,17 +137,23 @@ fn main() {
                                     .with_color(colors.next()),
                             )
                             .finish()
-                            .print((
-                                &input_name,
-                                ariadne::Source::from(file.src()),
-                            ))
+                            .print((&input_name, ariadne::Source::from(file.src())))
                             .unwrap();
                         }
                     }
                 }
             }
         }
-        ReadWorkspaceResult::Ok(_) => println!("Yay"),
+        ReadWorkspaceResult::Ok(workspace) => {
+            println!(
+                r#"Parsed Workspace "{}" with:"#,
+                workspace.aplang_file.project.name
+            );
+            println!("  Files: {}", workspace.project.files.files.len());
+            println!("    Functions: {}", workspace.project.pool.functions.len());
+            println!("    Variables: {}", workspace.project.pool.variables.len());
+            println!("    Structs: {}", workspace.project.pool.structs.len());
+        }
     }
 
     // println!(
