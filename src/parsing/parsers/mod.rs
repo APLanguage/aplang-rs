@@ -42,7 +42,8 @@ impl<'a> ParserState<'a> {
 }
 
 pub type TokenParserExtra<'a> = Full<Rich<'a, Token>, ParserState<'a>, ()>;
-pub trait TokenInput<'a> = ValueInput<'a, Token = Token, Span = SimpleSpan>;
+pub trait TokenInput<'a>: ValueInput<'a, Token = Token, Span = SimpleSpan> {}
+impl<'a, T> TokenInput<'a> for T where T:  ValueInput<'a, Token = Token, Span = SimpleSpan> {}
 pub trait TokenParser<'a, I: TokenInput<'a>, O>:
     Parser<'a, I, O, TokenParserExtra<'a>> + Clone {
 }

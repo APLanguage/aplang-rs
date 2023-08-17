@@ -7,7 +7,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-chumsky = {version = "1.0.0-alpha.4", features = ["label"]}
+chumsky = { version = "1.0.0-alpha.4", features = ["label"] }
 num-traits = "0.2"
 # num-derive = "0.3"
 regex = "1.9"
@@ -24,5 +24,9 @@ slotmap = "1.0.6"
 ariadne = "0.3"
 itertools = "0.11"
 toml = "0.7.6"
-walkdir = "2"
 serde = { version = "1.0", features = ["derive"] }
+jwalk = "0.8"
+same-file = "1.0.1"
+
+[target.'cfg(windows)'.dependencies.winapi-util]
+version = "0.1.1"

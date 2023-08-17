@@ -3,23 +3,22 @@
 #![feature(trait_alias)]
 #![feature(return_position_impl_trait_in_trait)]
 
-use std::{cell::RefCell, path::Path, rc::Rc};
+use std::path::Path;
 
 use crate::{
-    parsing::parsers::{expressions::expression_parser, file::File, TokenInput, TokenParser},
-    project::{read_workspace, ReadWorkspaceError},
-    source::RefVirtualFile,
+    parsing::parsers::{expressions::expression_parser, file::File},
+    project::{
+        readers::{read_workspace, ReadWorkspaceError, ReadWorkspaceResult},
+        Workspace,
+    },
 };
 use chumsky::{error::RichReason, prelude::Rich, primitive::end, ParseResult, Parser};
-use indextree::{Arena as IndexArena, NodeId};
 use itertools::Itertools;
-use lasso::{Rodeo, Spur};
-use logos::Logos;
+use lasso::Rodeo;
 use parsing::{ast::expressions::Expression, tokenizer::tokenize};
-use project::ReadWorkspaceResult;
-use slotmap::{new_key_type, SlotMap};
 use source::VirtualFile;
 use thiserror::__private::PathAsDisplay;
+use utils::walkdir::{WalkAction, WalkDir};
 
 use crate::{
     parsing::{
@@ -34,6 +33,7 @@ pub mod parsing;
 pub mod project;
 pub mod source;
 pub mod typing;
+pub mod utils;
 
 #[derive(Debug)]
 enum PathPartType {
@@ -56,50 +56,6 @@ macro_rules! parse_and_print {
     }};
 }
 
-struct FileTree {}
-
-new_key_type! { struct ModuleSlotMapId; }
-
-struct ModuleInfo {
-    name: Spur,
-    files: FileTree,
-}
-
-struct ModuleTree {
-    modules: SlotMap<ModuleSlotMapId, ModuleInfo>,
-    tree: IndexArena<ModuleSlotMapId>,
-}
-
-enum ModuleId {
-    SlotMapId(ModuleSlotMapId),
-    IndexArenaId(NodeId),
-}
-
-enum ThingId {
-    Module(ModuleId),
-}
-
-impl ModuleTree {
-    fn get_module(&self, module_id: ModuleId) -> Option<&ModuleInfo> {
-        match module_id {
-            ModuleId::SlotMapId(id) => self.modules.get(id),
-            ModuleId::IndexArenaId(id) => {
-                self.tree.get(id).and_then(|id| self.modules.get(*id.get()))
-            }
-        }
-    }
-
-    fn get_module_mut(&mut self, module_id: ModuleId) -> Option<&mut ModuleInfo> {
-        match module_id {
-            ModuleId::SlotMapId(id) => self.modules.get_mut(id),
-            ModuleId::IndexArenaId(id) => self
-                .tree
-                .get_mut(id)
-                .and_then(|id| self.modules.get_mut(*id.get())),
-        }
-    }
-}
-
 fn main() {
     let mut rodeo = Rodeo::new();
     // let file = &VirtualFile::new(input);
@@ -109,17 +65,58 @@ fn main() {
 
     // print_errors(&result, file);
 
-    match read_workspace(&mut rodeo, Path::new("./tests/test-projects/001")) {
-        ReadWorkspaceResult::ErrFile(e) => println!("{:#?}", e),
+    if let Some(workspace) =
+        read_workspace_and_report(&mut rodeo, Path::new("./tests/test-projects/001"))
+    {}
+    let mut depth = 0;
+    for (action, entry) in WalkDir::new("./src")
+        .min_depth(2)
+        .into_iter()
+        .filter_map(|e| e.ok())
+    {
+        let path = entry.into_path();
+        let name = path.file_name().and_then(|s| s.to_str()).unwrap_or("?");
+        match action {
+            WalkAction::EnterDir => {
+                depth += 1;
+                println!("{:indent$}\\ {}", "", name, indent = depth);
+            }
+            WalkAction::ListFile => println!("{:indent$} | {}", "", name, indent = depth),
+            WalkAction::ExitDir => {
+                println!("{:indent$}/ {}", "", name, indent = depth);
+                depth -= 1;
+            }
+        }
+    }
+
+    // println!(
+    //     "{:?}",
+    //     Token::lexer(file.whole_file())
+    //         .map(|tok| tok.unwrap_or(Token::Error))
+    //         .collect::<Vec<Token>>()
+    // );
+    // println!("----------------------------------------");
+    // fn test_parser<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, Expression> {
+    //     logic_parser(expression_parser())
+    // }
+    // parse_and_print!(r###"r"Hello " + ", age " + str(person.age)"""###, test_parser)
+}
+
+fn read_workspace_and_report(rodeo: &mut Rodeo, path: &Path) -> Option<Workspace> {
+    match read_workspace(rodeo, path) {
+        ReadWorkspaceResult::ErrFile(e) => {
+            println!("{:#?}", e);
+            None
+        }
         ReadWorkspaceResult::ErrProject(e, files) => {
-            if let Ok(project_error) = e.downcast::<ReadWorkspaceError>() {
+            if let Some(project_error) = e.downcast_ref::<ReadWorkspaceError>() {
                 match project_error {
                     ReadWorkspaceError::NoWorkspaceFile => println!("No aplang.toml found!"),
                     ReadWorkspaceError::ParseErrors(errs) => {
                         for (file_id, error) in errs {
                             let mut colors = ariadne::ColorGenerator::new();
                             // Generate & choose some colours for each of our elements
-                            let file = files.file_by_id(file_id).unwrap();
+                            let file = files.file_by_id(*file_id).unwrap();
                             let input_name = file.path().as_display().to_string();
                             ariadne::Report::build(
                                 ariadne::ReportKind::Error,
@@ -142,31 +139,13 @@ fn main() {
                         }
                     }
                 }
-            }
+            } else {
+                println!("{:#?}", e);
+            };
+            None
         }
-        ReadWorkspaceResult::Ok(workspace) => {
-            println!(
-                r#"Parsed Workspace "{}" with:"#,
-                workspace.aplang_file.project.name
-            );
-            println!("  Files: {}", workspace.project.files.files.len());
-            println!("    Functions: {}", workspace.project.pool.functions.len());
-            println!("    Variables: {}", workspace.project.pool.variables.len());
-            println!("    Structs: {}", workspace.project.pool.structs.len());
-        }
+        ReadWorkspaceResult::Ok(workspace) => Some(workspace),
     }
-
-    // println!(
-    //     "{:?}",
-    //     Token::lexer(file.whole_file())
-    //         .map(|tok| tok.unwrap_or(Token::Error))
-    //         .collect::<Vec<Token>>()
-    // );
-    // println!("----------------------------------------");
-    // fn test_parser<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, Expression> {
-    //     logic_parser(expression_parser())
-    // }
-    // parse_and_print!(r###"r"Hello " + ", age " + str(person.age)"""###, test_parser)
 }
 
 fn parse_file<'a, S: SourceFile>(
