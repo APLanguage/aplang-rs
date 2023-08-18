@@ -2,7 +2,6 @@ use std::path::Path;
 
 use indextree::{Arena as IndexArena, Node, NodeId};
 use lasso::Spur;
-use slotmap::{new_key_type, SlotMap};
 
 use super::{DeclarationId, FileId};
 

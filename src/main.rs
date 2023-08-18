@@ -168,7 +168,7 @@ fn parse_expression<'a, S: SourceFile>(
         .parse_with_state(tokenize(input.whole_file()), &mut state);
 }
 
-fn print_uses(uses: Box<[UseDeclaration]>, file: &VirtualFile) {
+fn print_uses(uses: &[UseDeclaration], file: &VirtualFile) {
     uses.iter()
         .flat_map(UseDeclaration::flatten_tree)
         .for_each(|(path, is_star)| {

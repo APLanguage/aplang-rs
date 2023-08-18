@@ -13,7 +13,7 @@ use crate::{
         tokenizer::{tokenize, Token},
     },
     source::{RefVirtualFile, SourceFile},
-    utils::walkdir::WalkAction,
+    utils::walkdir::{WalkAction, WalkDir},
 };
 
 use super::{
@@ -144,7 +144,7 @@ fn read_files(rodeo: &mut Rodeo, path: &Path) -> (Files, Scopes) {
     let mut files = SlotMap::<FileId, Box<dyn File>>::with_key();
     let mut scopes = Scopes::new(path);
     let mut current_scope = scopes.root_id();
-    for (action, path) in crate::utils::walkdir::WalkDir::new(path.join("src"))
+    for (action, path) in WalkDir::new(path.join("src"))
         .min_depth(1)
         .into_iter()
         .filter_map(|e| e.ok().map(|(a, e)| (a, e.into_path())))
