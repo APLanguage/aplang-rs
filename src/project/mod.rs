@@ -10,7 +10,7 @@ use slotmap::{new_key_type, SlotMap};
 
 use crate::parsing::ast::declarations::{Function, Struct, UseDeclaration};
 
-use self::files::APLangWorkspaceFile;
+use self::{files::APLangWorkspaceFile, scopes::Scopes};
 
 new_key_type! { pub struct FunctionId; }
 new_key_type! { pub struct StructId; }
@@ -72,8 +72,8 @@ pub struct Files {
 }
 
 impl Files {
-    pub fn file_by_id(&self, file_id: FileId) -> Option<&Box<dyn File>> {
-        self.files.get(file_id)
+    pub fn file_by_id(&self, file_id: FileId) -> Option<&dyn File> {
+        self.files.get(file_id).map(Box::as_ref)
     }
 }
 
@@ -81,6 +81,7 @@ pub struct Project {
     pub src: AstFiles,
     pub pool: DeclarationPool,
     pub files: Files,
+    pub scopes: Scopes,
 }
 
 pub struct AstFiles {

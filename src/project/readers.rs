@@ -1,4 +1,4 @@
-use std::{io::Read, path::Path};
+use std::{ffi::OsStr, io::Read, path::Path};
 
 use anyhow::Result;
 use chumsky::{prelude::Rich, primitive::end, span::SimpleSpan, Parser};
@@ -17,9 +17,9 @@ use crate::{
 };
 
 use super::{
-    files::APLangWorkspaceFile, AstFiles, DeclarationDelegate, DeclarationId, DeclarationInfo,
-    DeclarationPool, File, FileId, Files, FunctionId, ModuleData, ModuleId, Project, StructId,
-    VariableId, VirtualFile, Workspace,
+    files::APLangWorkspaceFile, scopes::{Scopes, ScopeType}, AstFiles, DeclarationDelegate, DeclarationId,
+    DeclarationInfo, DeclarationPool, File, FileId, Files, FunctionId, ModuleData, ModuleId,
+    Project, StructId, VariableId, VirtualFile, Workspace,
 };
 
 #[derive(Debug, Error)]
@@ -66,14 +66,13 @@ pub enum ReadProjectResult {
 }
 
 fn read_project(rodeo: &mut Rodeo, path: &Path) -> ReadProjectResult {
-    let files = read_files(path);
-    let mut functions: SlotMap<FunctionId, DeclarationInfo<Function>> = SlotMap::with_key();
-    let mut structs: SlotMap<StructId, DeclarationInfo<Struct>> = SlotMap::with_key();
-    let mut variables: SlotMap<VariableId, DeclarationInfo<Variable>> = SlotMap::with_key();
-    let mut declaration_delegates: SlotMap<DeclarationId, DeclarationDelegate> =
-        SlotMap::with_key();
+    let (files, scopes) = read_files(rodeo, path);
+    let mut functions = SlotMap::<FunctionId, DeclarationInfo<Function>>::with_key();
+    let mut structs = SlotMap::<StructId, DeclarationInfo<Struct>>::with_key();
+    let mut variables = SlotMap::<VariableId, DeclarationInfo<Variable>>::with_key();
+    let mut declaration_delegates = SlotMap::<DeclarationId, DeclarationDelegate>::with_key();
 
-    let mut modules: SlotMap<ModuleId, ModuleData> = SlotMap::with_key();
+    let mut modules = SlotMap::<ModuleId, ModuleData>::with_key();
     let mut parse_errors: Vec<(FileId, Rich<'static, Token, _, &'static str>)> = vec![];
     for (file_id, file) in files.files.iter() {
         let virt_file = RefVirtualFile::new(file.src());
@@ -137,29 +136,45 @@ fn read_project(rodeo: &mut Rodeo, path: &Path) -> ReadProjectResult {
             declarations: declaration_delegates,
         },
         files,
+        scopes,
     })
 }
 
-fn read_files(path: &Path) -> Files {
+fn read_files(rodeo: &mut Rodeo, path: &Path) -> (Files, Scopes) {
     let mut files = SlotMap::<FileId, Box<dyn File>>::with_key();
-    for (path, src) in crate::utils::walkdir::WalkDir::new(path.join("src"))
+    let mut scopes = Scopes::new(path);
+    let mut current_scope = scopes.root_id();
+    for (action, path) in crate::utils::walkdir::WalkDir::new(path.join("src"))
         .min_depth(1)
         .into_iter()
-        .filter_map(|e| {
-            e.ok().and_then(|(action, entry)| {
-                if matches!(action, WalkAction::ListFile) {
-                    Some(entry.into_path())
-                } else {
-                    None
-                }
-            })
-        })
-        .filter_map(|p| std::fs::read_to_string(&p).ok().map(|src| (p, src)))
+        .filter_map(|e| e.ok().map(|(a, e)| (a, e.into_path())))
     {
-        files.insert(Box::new(VirtualFile {
-            src,
-            path: path.into(),
-        }));
+        match action {
+            WalkAction::EnterDir => {
+                let Some(name) = path.file_name().and_then(OsStr::to_str) else {
+                    continue;
+                };
+                current_scope = scopes.add(
+                    current_scope,
+                    ScopeType::Package(rodeo.get_or_intern(name)),
+                );
+            }
+            WalkAction::ListFile => {
+                let Some(src) = std::fs::read_to_string(&path).ok() else {
+                    continue;
+                };
+                let file_id = files.insert(Box::new(VirtualFile {
+                    src,
+                    path: path.into(),
+                }));
+                scopes.add(current_scope, ScopeType::File(file_id));
+            }
+            WalkAction::ExitDir => {
+                current_scope = scopes
+                    .parent(current_scope)
+                    .expect("BUG: it should have a parent");
+            }
+        }
     }
-    Files { files }
+    (Files { files }, scopes)
 }

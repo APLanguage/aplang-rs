@@ -25,7 +25,6 @@ ariadne = "0.3"
 itertools = "0.11"
 toml = "0.7.6"
 serde = { version = "1.0", features = ["derive"] }
-jwalk = "0.8"
 same-file = "1.0.1"
 
 [target.'cfg(windows)'.dependencies.winapi-util]
