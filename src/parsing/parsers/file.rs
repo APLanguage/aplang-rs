@@ -99,6 +99,6 @@ pub fn use_parser<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, UseDeclara
                     path_p,
                 ))
             })
-            .map(|(start, use_path)| UseDeclaration(start.into_boxed_slice(), use_path)),
+            .map(|(start, use_path)| UseDeclaration { scope: start.into_boxed_slice(), path: use_path }),
     )
 }

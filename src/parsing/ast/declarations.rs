@@ -32,12 +32,15 @@ pub enum UsePathStart {
 }
 
 #[derive(Debug)]
-pub struct UseDeclaration(pub Box<[SimpleSpan]>, pub UsePath);
+pub struct UseDeclaration {
+    pub scope: Box<[SimpleSpan]>,
+    pub path: UsePath,
+}
 
 impl UseDeclaration {
     pub fn flatten_tree(&self) -> impl Iterator<Item = (Box<[SimpleSpan]>, bool)> + '_ {
         use UsePathEnd::*;
-        DftLongestPaths::new(&self.1, |node: &UsePath| match &node.1 {
+        DftLongestPaths::new(&self.path, |node: &UsePath| match &node.1 {
             Star(_) | Single => Either::Left(empty()),
             Split(branches) => Either::Right(branches.iter()),
         })

@@ -2,6 +2,7 @@ use std::{ffi::OsStr, io::Read, path::Path};
 
 use anyhow::Result;
 use chumsky::{prelude::Rich, primitive::end, span::SimpleSpan, Parser};
+use either::Either;
 use lasso::Rodeo;
 use slotmap::SlotMap;
 use thiserror::Error;
@@ -17,9 +18,11 @@ use crate::{
 };
 
 use super::{
-    files::APLangWorkspaceFile, scopes::{Scopes, ScopeType}, AstFiles, DeclarationDelegate, DeclarationId,
-    DeclarationInfo, DeclarationPool, File, FileId, Files, FunctionId, ModuleData, ModuleId,
-    Project, StructId, VariableId, VirtualFile, Workspace,
+    files::APLangWorkspaceFile,
+    scopes::{ScopeType, Scopes},
+    AstFiles, DeclarationDelegate, DeclarationId, DeclarationInfo, DeclarationPool, Dependencies,
+    File, FileId, Files, FunctionId, ModuleData, ModuleId, Project, StructId, VariableId,
+    VirtualFile, Workspace,
 };
 
 #[derive(Debug, Error)]
@@ -54,9 +57,12 @@ pub fn read_workspace(rodeo: &mut Rodeo, path: &Path) -> ReadWorkspaceResult {
         ReadProjectResult::Err(err, files) => return ReadWorkspaceResult::ErrProject(err, files),
         ReadProjectResult::Ok(p) => p,
     };
+    let (deps, id) =
+        Dependencies::new_from_project(rodeo.get_or_intern(&aplang_file.project.name), project);
     ReadWorkspaceResult::Ok(Workspace {
-        project,
         aplang_file,
+        dependencies: deps,
+        _project: id,
     })
 }
 
@@ -115,7 +121,7 @@ fn read_project(rodeo: &mut Rodeo, path: &Path) -> ReadProjectResult {
             }
 
             modules.insert(ModuleData {
-                imports: uses,
+                imports: Either::Left(uses),
                 functions: module_functions,
                 structs: module_structs,
                 variables: module_variables,
@@ -154,12 +160,17 @@ fn read_files(rodeo: &mut Rodeo, path: &Path) -> (Files, Scopes) {
                 let Some(name) = path.file_name().and_then(OsStr::to_str) else {
                     continue;
                 };
-                current_scope = scopes.add(
-                    current_scope,
-                    ScopeType::Package(rodeo.get_or_intern(name)),
-                );
+                current_scope =
+                    scopes.add(current_scope, ScopeType::Package(rodeo.get_or_intern(name)));
             }
             WalkAction::ListFile => {
+                let Some(name) = path
+                    .file_name()
+                    .and_then(OsStr::to_str)
+                    .map(|n| rodeo.get_or_intern(n))
+                else {
+                    continue;
+                };
                 let Some(src) = std::fs::read_to_string(&path).ok() else {
                     continue;
                 };
@@ -167,7 +178,7 @@ fn read_files(rodeo: &mut Rodeo, path: &Path) -> (Files, Scopes) {
                     src,
                     path: path.into(),
                 }));
-                scopes.add(current_scope, ScopeType::File(file_id));
+                scopes.add(current_scope, ScopeType::File(name, file_id));
             }
             WalkAction::ExitDir => {
                 current_scope = scopes
