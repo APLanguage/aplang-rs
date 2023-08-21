@@ -1,4 +1,4 @@
-use std::{collections::HashMap, hash::Hash, path::Path};
+use std::{collections::HashMap, path::Path};
 
 use indextree::{Arena as IndexArena, Node, NodeId};
 use lasso::Spur;

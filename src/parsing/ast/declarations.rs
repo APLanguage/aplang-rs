@@ -53,7 +53,7 @@ impl UseDeclaration {
         .map(|path| {
             let star = path.last().map(|p| matches!(p.1, Star(_))).unwrap_or(false);
             let single_alias = match path.last() {
-                Some(UsePath(_, Single(alias))) => alias.clone(),
+                Some(UsePath(_, Single(alias))) => *alias,
                 _ => None,
             };
             FlatUseDeclaration {

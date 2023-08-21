@@ -2,7 +2,7 @@ use std::convert::identity;
 
 use chumsky::{
     prelude::Rich,
-    primitive::{choice, group, just},
+    primitive::{choice, just},
     recursive::recursive,
     span::SimpleSpan,
     IterParser, Parser,
@@ -51,7 +51,7 @@ pub fn use_parser<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, UseDeclara
             .ignored()
             .src()
             .validate(|s, span: SimpleSpan, emitter| {
-                if s.chars().find(|c: &char| c.is_whitespace()).is_some() {
+                if s.chars().any(|c: char| c.is_whitespace()) {
                     emitter.emit(Rich::custom(span, "No whitespaces are allowed. Should match [a-zA-Z][a-zA-Z0-9]*(-[a-zA-Z0-9]+)*"))
                 }
                 span
