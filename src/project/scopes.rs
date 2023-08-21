@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::{collections::HashMap, hash::Hash, path::Path};
 
 use indextree::{Arena as IndexArena, Node, NodeId};
 use lasso::Spur;
@@ -15,6 +15,8 @@ pub enum ScopeType {
 
 pub struct Scopes {
     tree: IndexArena<ScopeType>,
+    by_file: HashMap<FileId, NodeId>,
+    by_declaration: HashMap<DeclarationId, NodeId>,
     root: NodeId,
 }
 
@@ -27,7 +29,12 @@ impl Scopes {
     pub fn new(root_path: &Path) -> Self {
         let mut tree = IndexArena::new();
         let root = tree.new_node(ScopeType::Root(root_path.into()));
-        Scopes { tree, root }
+        Scopes {
+            tree,
+            root,
+            by_file: HashMap::new(),
+            by_declaration: HashMap::new(),
+        }
     }
 
     pub fn root_id(&self) -> ScopeId {
@@ -42,13 +49,13 @@ impl Scopes {
         let mut node_opt = self.tree.get(id.node)?.first_child();
         while let Some(node_id) = node_opt {
             let node = self.tree.get(node_id)?;
-            if match node.get() {
+            if *match node.get() {
                 ScopeType::Declaration(spur, _) => spur,
                 ScopeType::File(spur, _) => spur,
                 ScopeType::Package(spur) => spur,
 
                 ScopeType::Root(_) => unreachable!(),
-            } == &name
+            } == name
             {
                 break;
             }
@@ -80,8 +87,17 @@ impl Scopes {
     }
 
     pub fn add(&mut self, scope: ScopeId, scope_type: ScopeType) -> ScopeId {
-        let new = self.tree.new_node(scope_type);
+        let new = self.tree.new_node(scope_type.clone());
         scope.node.append(new, &mut self.tree);
+        match scope_type {
+            ScopeType::Declaration(_, id) => {
+                self.by_declaration.insert(id, new);
+            }
+            ScopeType::File(_, id) => {
+                self.by_file.insert(id, new);
+            }
+            _ => {}
+        }
         ScopeId { node: new }
     }
 
@@ -100,5 +116,25 @@ impl Scopes {
             node_opt = node.next_sibling();
         }
         Some(scope_ids)
+    }
+
+    pub fn scope_of_file(&self, file_id: FileId) -> Option<ScopeId> {
+        self.by_file.get(&file_id).map(|&node| ScopeId { node })
+    }
+
+    pub fn scope_of_declaration(&self, declaration_id: DeclarationId) -> Option<ScopeId> {
+        self.by_declaration
+            .get(&declaration_id)
+            .map(|&node| ScopeId { node })
+    }
+
+    pub(crate) fn scope_name(&self, scope_id: ScopeId) -> Option<Spur> {
+        self.tree.get(scope_id.node).map(|node| *match node.get() {
+            ScopeType::Declaration(spur, _) => spur,
+            ScopeType::File(spur, _) => spur,
+            ScopeType::Package(spur) => spur,
+
+            ScopeType::Root(_) => unreachable!(),
+        })
     }
 }

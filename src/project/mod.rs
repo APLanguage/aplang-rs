@@ -1,5 +1,4 @@
 pub mod files;
-pub mod name_resolver;
 pub mod readers;
 pub mod scopes;
 
@@ -50,7 +49,7 @@ impl Workspace {
     }
 
     pub fn project_dep_id(&self) -> DependencyId {
-        self._project.clone()
+        self._project
     }
 }
 
@@ -59,6 +58,7 @@ pub struct DeclarationInfo<D> {
     file_id: FileId,
 }
 
+#[derive(Debug)]
 pub enum DeclarationDelegate {
     Function(FunctionId),
     Struct(StructId),
@@ -119,14 +119,15 @@ pub struct AstFiles {
 }
 #[derive(Debug)]
 pub struct UseTargetSingle {
-    pub name: Option<Spanned<Spur>>,
+    pub alias_name: Option<Spanned<Spur>>,
+    pub name: Spur,
     pub scope: ScopeId,
 }
 
 #[derive(Debug)]
 pub struct UseTargetStar {
     pub scope: ScopeId,
-    pub end_targets: Box<[ScopeId]>,
+    pub end_targets: Box<[(Spur, ScopeId)]>,
 }
 
 #[derive(Debug)]
@@ -170,16 +171,17 @@ impl Dependencies {
         self.deps.insert(info)
     }
 
-    fn get_dependency_by_name(&self, name: &[Spur]) -> Result<DependencyId, usize> {
+    pub fn get_dependency_by_name(&self, name: &[Spur]) -> Result<DependencyId, usize> {
         if name.len() != 1 {
             todo!("Dependencies#get_dependency_by_name: multi project workspaces")
         }
         self.by_name
             .get(name.get(0).unwrap())
-            .map(DependencyId::clone).ok_or(0)
+            .map(DependencyId::clone)
+            .ok_or(0)
     }
 
-    fn get_dependency_scope(&self, dependency_id: DependencyId) -> Option<&Scopes> {
+    pub fn get_dependency_scope(&self, dependency_id: DependencyId) -> Option<&Scopes> {
         self.deps.get(dependency_id).map(|d| &d.project.scopes)
     }
 }
@@ -233,6 +235,26 @@ impl ResolvedUses {
 
     pub fn iter_err(&self) -> Iter<'_, SimpleSpan> {
         return self.errors.iter();
+    }
+
+    pub fn find(&self, name: Spur) -> impl Iterator<Item = (DependencyId, ScopeId)> + '_ {
+        self.uses
+            .iter()
+            .flat_map(move |(dep_id, ResolvedUsesInDependency(_, singles))| {
+                singles
+                    .iter()
+                    .filter(move |t| t.alias_name.map(|n| n.0 == name).unwrap_or(t.name == name))
+                    .map(|t| (*dep_id, t.scope))
+            })
+            .chain(self.uses.iter().flat_map(
+                move |(dep_id, ResolvedUsesInDependency(stars, _))| {
+                    stars
+                        .iter()
+                        .flat_map(|t| t.end_targets.iter())
+                        .filter_map(move |(target_name, id)| (*target_name == name).then_some(id))
+                        .map(|&id| (*dep_id, id))
+                },
+            ))
     }
 }
 

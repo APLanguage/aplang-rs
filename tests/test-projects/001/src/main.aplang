@@ -1,4 +1,5 @@
-use(std) println
+use(my-project) main::Person
+use(not-my-project) println
 
 struct Person {
     val name: str,

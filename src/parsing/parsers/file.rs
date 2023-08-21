@@ -1,8 +1,10 @@
 use std::convert::identity;
 
 use chumsky::{
-    primitive::{choice, just},
+    prelude::Rich,
+    primitive::{choice, group, just},
     recursive::recursive,
+    span::SimpleSpan,
     IterParser, Parser,
 };
 use either::Either;
@@ -44,7 +46,16 @@ pub fn file_parser<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, File> + C
 pub fn use_parser<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, UseDeclaration> {
     keyword(Identifier::Use).ignore_then(
         ident()
-            .span()
+            .separated_by(just(Token::Minus))
+            .at_least(1)
+            .ignored()
+            .src()
+            .validate(|s, span: SimpleSpan, emitter| {
+                if s.chars().find(|c: &char| c.is_whitespace()).is_some() {
+                    emitter.emit(Rich::custom(span, "No whitespaces are allowed. Should match [a-zA-Z][a-zA-Z0-9]*(-[a-zA-Z0-9]+)*"))
+                }
+                span
+            })
             .separated_by(just(Token::Slash))
             .at_least(1)
             .collect::<Vec<_>>()

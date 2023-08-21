@@ -11,6 +11,7 @@ use crate::{
         readers::{read_workspace, ReadWorkspaceError, ReadWorkspaceResult},
         Workspace,
     },
+    resolution::name_resolver::resolve_uses,
 };
 use chumsky::{error::RichReason, prelude::Rich, primitive::end, ParseResult, Parser};
 use either::Either::{Left, Right};
@@ -20,7 +21,6 @@ use parsing::{
     ast::{declarations::FlatUseDeclaration, expressions::Expression},
     tokenizer::tokenize,
 };
-use project::name_resolver::resolve_uses;
 use source::VirtualFile;
 use thiserror::__private::PathAsDisplay;
 
@@ -35,6 +35,7 @@ use crate::{
 
 pub mod parsing;
 pub mod project;
+pub mod resolution;
 pub mod source;
 pub mod typing;
 pub mod utils;
@@ -92,7 +93,7 @@ fn main() {
                     .with_message("Module not found.")
                     .with_label(
                         ariadne::Label::new((&input_name, err.into_iter()))
-                            .with_message("this 🍌, where?")
+                            .with_message("↑ where 🍌?")
                             .with_color(colors.next()),
                     )
                     .finish()
@@ -102,10 +103,14 @@ fn main() {
         }
         if is_errors {
             println!("Errors found, cannot go further.");
-            return;
+            // for (spur, s) in rodeo.into_iter() {
+            //     println!("  {spur:>3?}: {s}")
+            // }
+        } else {
+            println!("No use resolution errors found.")
         }
-        println!("No use resolution errors found.")
     }
+
     // let mut depth = 0;
     // for (action, entry) in WalkDir::new("./src")
     //     .min_depth(2)

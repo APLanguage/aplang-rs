@@ -7,7 +7,9 @@ use logos::Source;
 
 use crate::parsing::ast::declarations::FlatUseDeclaration;
 
-use super::{ModuleId, ResolvedUses, UseTarget, UseTargetSingle, UseTargetStar, Workspace};
+use crate::project::{
+    ModuleId, ResolvedUses, UseTarget, UseTargetSingle, UseTargetStar, Workspace,
+};
 
 pub fn resolve_uses(rodeo: &mut Rodeo, workspace: &mut Workspace) {
     let project = workspace.project();
@@ -69,16 +71,23 @@ pub fn resolve_uses(rodeo: &mut Rodeo, workspace: &mut Workspace) {
                             if star {
                                 UseTarget::UseTargetStar(UseTargetStar {
                                     scope: scope_id,
-                                    end_targets: project
-                                        .scopes
-                                        .scope_children(scope_id)
-                                        .expect("BUG: the scope should exist!")
-                                        .into_boxed_slice(),
+                                    end_targets: {
+                                        let children = project
+                                            .scopes
+                                            .scope_children(scope_id)
+                                            .expect("BUG: the scope should exist!");
+                                        children
+                                            .iter()
+                                            .map(|&id| (project.scopes.scope_name(id).unwrap(), id))
+                                            .collect_vec()
+                                    }
+                                    .into_boxed_slice(),
                                 })
                             } else {
                                 UseTarget::UseTargetSingle(UseTargetSingle {
-                                    name: single_alias,
+                                    alias_name: single_alias,
                                     scope: scope_id,
+                                    name: project.scopes.scope_name(scope_id).unwrap(),
                                 })
                             },
                         );

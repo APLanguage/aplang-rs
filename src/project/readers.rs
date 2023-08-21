@@ -72,7 +72,7 @@ pub enum ReadProjectResult {
 }
 
 fn read_project(rodeo: &mut Rodeo, path: &Path) -> ReadProjectResult {
-    let (files, scopes) = read_files(rodeo, path);
+    let (files, mut scopes) = read_files(rodeo, path);
     let mut functions = SlotMap::<FunctionId, DeclarationInfo<Function>>::with_key();
     let mut structs = SlotMap::<StructId, DeclarationInfo<Struct>>::with_key();
     let mut variables = SlotMap::<VariableId, DeclarationInfo<Variable>>::with_key();
@@ -98,26 +98,41 @@ fn read_project(rodeo: &mut Rodeo, path: &Path) -> ReadProjectResult {
             let mut module_variables = vec![];
 
             for declaration in declarations.into_vec().into_iter() {
-                match declaration {
+                let (name, id) = match declaration {
                     Declaration::Variable(v) => {
                         let name = v.name.0;
                         let id = variables.insert(DeclarationInfo { decl: v, file_id });
                         module_variables.push((name, id));
-                        declaration_delegates.insert(DeclarationDelegate::Variable(id));
+                        (
+                            name,
+                            declaration_delegates.insert(DeclarationDelegate::Variable(id)),
+                        )
                     }
                     Declaration::Function(f) => {
                         let name = f.name.0;
                         let id = functions.insert(DeclarationInfo { decl: f, file_id });
                         module_functions.push((name, id));
-                        declaration_delegates.insert(DeclarationDelegate::Function(id));
+                        (
+                            name,
+                            declaration_delegates.insert(DeclarationDelegate::Function(id)),
+                        )
                     }
                     Declaration::Struct(s) => {
-                        let name = s.name.0;
+                        let name = dbg!(s.name.0);
                         let id = structs.insert(DeclarationInfo { decl: s, file_id });
                         module_structs.push((name, id));
-                        declaration_delegates.insert(DeclarationDelegate::Struct(id));
+                        (
+                            name,
+                            declaration_delegates.insert(DeclarationDelegate::Struct(id)),
+                        )
                     }
                 };
+                scopes.add(
+                    scopes
+                        .scope_of_file(file_id)
+                        .expect("BUG: File should have been registered as scope"),
+                    ScopeType::Declaration(name, id),
+                );
             }
 
             modules.insert(ModuleData {
@@ -164,13 +179,23 @@ fn read_files(rodeo: &mut Rodeo, path: &Path) -> (Files, Scopes) {
                     scopes.add(current_scope, ScopeType::Package(rodeo.get_or_intern(name)));
             }
             WalkAction::ListFile => {
-                let Some(name) = path
-                    .file_name()
-                    .and_then(OsStr::to_str)
-                    .map(|n| rodeo.get_or_intern(n))
-                else {
+                if !path
+                    .extension()
+                    .and_then(|n| n.to_str())
+                    .is_some_and(|name| name == "aplang")
+                {
+                    continue;
+                }
+                let Some(name) = path.file_stem().and_then(OsStr::to_str) else {
                     continue;
                 };
+
+                if name.chars().any(|c| !c.is_ascii_alphabetic() && c != '_') {
+                    println!("Skipped file {} cuz invalid name.", path.display());
+                    continue;
+                }
+
+                let name = rodeo.get_or_intern(name);
                 let Some(src) = std::fs::read_to_string(&path).ok() else {
                     continue;
                 };

@@ -43,7 +43,7 @@ impl<'a> ParserState<'a> {
 
 pub type TokenParserExtra<'a> = Full<Rich<'a, Token>, ParserState<'a>, ()>;
 pub trait TokenInput<'a>: ValueInput<'a, Token = Token, Span = SimpleSpan> {}
-impl<'a, T> TokenInput<'a> for T where T:  ValueInput<'a, Token = Token, Span = SimpleSpan> {}
+impl<'a, T> TokenInput<'a> for T where T: ValueInput<'a, Token = Token, Span = SimpleSpan> {}
 pub trait TokenParser<'a, I: TokenInput<'a>, O>:
     Parser<'a, I, O, TokenParserExtra<'a>> + Clone {
 }
@@ -90,6 +90,11 @@ where
     fn spur(self) -> impl TokenParser<'a, I, Spur> + Clone {
         self.span()
             .map_with_state(|_, span, state| state.intern(span.into()).unwrap())
+    }
+
+    fn src(self) -> impl TokenParser<'a, I, &'a str> + Clone {
+        self.span()
+            .map_with_state(|_, span, state| state.slice(span.into()).unwrap())
     }
 
     fn spanned(self) -> impl TokenParser<'a, I, Spanned<O>> + Clone {

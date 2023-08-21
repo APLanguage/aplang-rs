@@ -7,6 +7,8 @@ pub type SourceId = usize;
 #[derive(Debug, PartialEq)]
 pub struct Spanned<T>(pub T, pub SimpleSpan);
 
+impl<T: Copy> Copy for Spanned<T> {}
+
 impl<T: Clone> Clone for Spanned<T> {
     fn clone(&self) -> Self {
         Self(self.0.clone(), self.1.clone())
