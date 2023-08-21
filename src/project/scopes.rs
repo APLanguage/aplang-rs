@@ -60,13 +60,13 @@ impl Scopes {
     pub fn scope_child_by_path(&self, id: ScopeId, path: &[Spur]) -> Result<ScopeId, usize> {
         let mut itr = path.iter();
         let mut i = 0;
-        let mut path_frag_opt = itr.next().and_then(|s| self.scope_child_by_name(id, s.clone()));
+        let mut path_frag_opt = itr.next().and_then(|&s| self.scope_child_by_name(id, s));
         while let Some(path_frag) = path_frag_opt {
-            let Some(next_frag) = itr.next() else {
+            let Some(&next_frag) = itr.next() else {
                 break;
             };
             i += 1;
-            path_frag_opt = self.scope_child_by_name(id, next_frag.clone())
+            path_frag_opt = self.scope_child_by_name(path_frag, next_frag)
         }
 
         path_frag_opt.ok_or(i)
