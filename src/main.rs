@@ -13,17 +13,21 @@ use crate::{
     },
 };
 use chumsky::{error::RichReason, prelude::Rich, primitive::end, ParseResult, Parser};
+use either::Either::{Left, Right};
 use itertools::Itertools;
 use lasso::Rodeo;
-use parsing::{ast::expressions::Expression, tokenizer::tokenize};
+use parsing::{
+    ast::{declarations::FlatUseDeclaration, expressions::Expression},
+    tokenizer::tokenize,
+};
+use project::name_resolver::resolve_uses;
 use source::VirtualFile;
 use thiserror::__private::PathAsDisplay;
-use utils::walkdir::{WalkAction, WalkDir};
 
 use crate::{
     parsing::{
         ast::declarations::UseDeclaration,
-        parsers::{expressions::*, file::file_parser, ParserState},
+        parsers::{file::file_parser, ParserState},
         tokenizer::Token,
     },
     source::SourceFile,
@@ -64,30 +68,64 @@ fn main() {
     // println!("{:#?}", result);
 
     // print_errors(&result, file);
-
-    if let Some(workspace) =
+    println!("Reading workspace...");
+    if let Some(mut workspace) =
         read_workspace_and_report(&mut rodeo, Path::new("./tests/test-projects/001"))
-    {}
-    let mut depth = 0;
-    for (action, entry) in WalkDir::new("./src")
-        .min_depth(2)
-        .into_iter()
-        .filter_map(|e| e.ok())
     {
-        let path = entry.into_path();
-        let name = path.file_name().and_then(|s| s.to_str()).unwrap_or("?");
-        match action {
-            WalkAction::EnterDir => {
-                depth += 1;
-                println!("{:indent$}\\ {}", "", name, indent = depth);
+        println!("Resolving...");
+        resolve_uses(&mut rodeo, &mut workspace);
+        println!("Accumulating errors...");
+        let mut is_errors = false;
+        for (m_id, m) in workspace.project().src.files.iter() {
+            let file = workspace.project().files.file_by_id(m.file_id).unwrap();
+            for err in match &m.imports {
+                Left(_) => panic!("should've resolved everything"),
+                Right(r) => r,
             }
-            WalkAction::ListFile => println!("{:indent$} | {}", "", name, indent = depth),
-            WalkAction::ExitDir => {
-                println!("{:indent$}/ {}", "", name, indent = depth);
-                depth -= 1;
+            .iter_err()
+            {
+                is_errors = true;
+                let mut colors = ariadne::ColorGenerator::new();
+                // Generate & choose some colours for each of our elements
+                let input_name = file.path().as_display().to_string();
+                ariadne::Report::build(ariadne::ReportKind::Error, &input_name, err.start)
+                    .with_message("Module not found.")
+                    .with_label(
+                        ariadne::Label::new((&input_name, err.into_iter()))
+                            .with_message("this 🍌, where?")
+                            .with_color(colors.next()),
+                    )
+                    .finish()
+                    .print((&input_name, ariadne::Source::from(file.src())))
+                    .unwrap();
             }
         }
+        if is_errors {
+            println!("Errors found, cannot go further.");
+            return;
+        }
+        println!("No use resolution errors found.")
     }
+    // let mut depth = 0;
+    // for (action, entry) in WalkDir::new("./src")
+    //     .min_depth(2)
+    //     .into_iter()
+    //     .filter_map(|e| e.ok())
+    // {
+    //     let path = entry.into_path();
+    //     let name = path.file_name().and_then(|s| s.to_str()).unwrap_or("?");
+    //     match action {
+    //         WalkAction::EnterDir => {
+    //             depth += 1;
+    //             println!("{:indent$}\\ {}", "", name, indent = depth);
+    //         }
+    //         WalkAction::ListFile => println!("{:indent$} | {}", "", name, indent = depth),
+    //         WalkAction::ExitDir => {
+    //             println!("{:indent$}/ {}", "", name, indent = depth);
+    //             depth -= 1;
+    //         }
+    //     }
+    // }
 
     // println!(
     //     "{:?}",
@@ -169,17 +207,27 @@ fn parse_expression<'a, S: SourceFile>(
 }
 
 fn print_uses(uses: &[UseDeclaration], file: &VirtualFile) {
-    uses.iter()
-        .flat_map(UseDeclaration::flatten_tree)
-        .for_each(|(path, is_star)| {
+    uses.iter().flat_map(UseDeclaration::flatten_tree).for_each(
+        |FlatUseDeclaration {
+             path,
+             star,
+             single_alias,
+         }| {
             println!(
                 "{}{}",
                 path.iter()
                     .map(|s| file.read_range(s.into_range()).unwrap())
                     .join("::"),
-                if is_star { "::*" } else { "" }
+                if star {
+                    "::*"
+                } else {
+                    single_alias
+                        .and_then(|s| file.read_range(s.1.into_range()))
+                        .unwrap_or("")
+                }
             )
-        });
+        },
+    );
 }
 
 fn print_errors<R>(result: &ParseResult<R, Rich<Token>>, file: &dyn SourceFile) {

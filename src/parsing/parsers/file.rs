@@ -19,8 +19,7 @@ use crate::parsing::{
 
 pub type File = (Box<[UseDeclaration]>, Box<[Declaration]>);
 
-pub fn file_parser<'a, I: TokenInput<'a>>(
-) -> impl TokenParser<'a, I, File> + Clone {
+pub fn file_parser<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, File> + Clone {
     choice((
         struct_parser().map(Declaration::Struct).map(Either::Right),
         variable_parser()
@@ -77,10 +76,16 @@ pub fn use_parser<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, UseDeclara
                                         .labelled("use-split"),
                                     just(Token::Asterisk).span().map(UsePathEnd::Star),
                                 )))
-                                .or_not()
-                                .map(|e| e.unwrap_or(UsePathEnd::Single))
                                 .boxed()
-                                .labelled("use-path-corona"),
+                                .labelled("use-path-corona")
+                                .or(keyword(Identifier::As)
+                                    .ignore_then(ident())
+                                    .spur()
+                                    .spanned()
+                                    .labelled("use-path-single-alias")
+                                    .or_not()
+                                    .map(UsePathEnd::Single)
+                                    .labelled("use-path-single")),
                         )
                         .map(|(paths, end)| UsePath(paths, end))
                 });
@@ -99,6 +104,9 @@ pub fn use_parser<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, UseDeclara
                     path_p,
                 ))
             })
-            .map(|(start, use_path)| UseDeclaration { scope: start.into_boxed_slice(), path: use_path }),
+            .map(|(start, use_path)| UseDeclaration {
+                scope: start.into_boxed_slice(),
+                path: use_path,
+            }),
     )
 }

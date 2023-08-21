@@ -5,9 +5,11 @@ use itertools::Itertools;
 use lasso::Rodeo;
 use logos::Source;
 
-use super::{ModuleId, ResolvedUses, Workspace};
+use crate::parsing::ast::declarations::FlatUseDeclaration;
 
-fn resolve_uses(rodeo: &mut Rodeo, workspace: &mut Workspace) {
+use super::{ModuleId, ResolvedUses, UseTarget, UseTargetSingle, UseTargetStar, Workspace};
+
+pub fn resolve_uses(rodeo: &mut Rodeo, workspace: &mut Workspace) {
     let project = workspace.project();
     let mut resolutions = HashMap::<ModuleId, ResolvedUses>::new();
 
@@ -23,7 +25,7 @@ fn resolve_uses(rodeo: &mut Rodeo, workspace: &mut Workspace) {
             .src();
 
         for u in uses.iter() {
-            let Some(dependency_id) = workspace.dependencies.get_dependency_by_name(
+            let dependency_id = match workspace.dependencies.get_dependency_by_name(
                 &u.scope
                     .iter()
                     .map(|s| {
@@ -33,8 +35,12 @@ fn resolve_uses(rodeo: &mut Rodeo, workspace: &mut Workspace) {
                         )
                     })
                     .collect_vec(),
-            ) else {
-                panic!("the dependency should exist 🤨 (well, no, there is no error handling yet)")
+            ) {
+                Ok(d) => d,
+                Err(i) => {
+                    resolved.add_error(*u.scope.get(i).unwrap());
+                    continue;
+                }
             };
 
             let scopes = workspace
@@ -43,7 +49,13 @@ fn resolve_uses(rodeo: &mut Rodeo, workspace: &mut Workspace) {
                 .unwrap();
             let root = scopes.root_id();
 
-            for (flat_spans, star) in u.flatten_tree() {
+            for flat in u.flatten_tree() {
+                let FlatUseDeclaration {
+                    path: flat_spans,
+                    star,
+                    single_alias,
+                } = flat;
+
                 match scopes.scope_child_by_path(
                     root,
                     &flat_spans
@@ -52,7 +64,24 @@ fn resolve_uses(rodeo: &mut Rodeo, workspace: &mut Workspace) {
                         .collect_vec(),
                 ) {
                     Ok(scope_id) => {
-                        resolved.add(dependency_id, scope_id, star);
+                        resolved.add(
+                            dependency_id,
+                            if star {
+                                UseTarget::UseTargetStar(UseTargetStar {
+                                    scope: scope_id,
+                                    end_targets: project
+                                        .scopes
+                                        .scope_children(scope_id)
+                                        .expect("BUG: the scope should exist!")
+                                        .into_boxed_slice(),
+                                })
+                            } else {
+                                UseTarget::UseTargetSingle(UseTargetSingle {
+                                    name: single_alias,
+                                    scope: scope_id,
+                                })
+                            },
+                        );
                     }
                     Err(i) => resolved.add_error(flat_spans[i]),
                 }

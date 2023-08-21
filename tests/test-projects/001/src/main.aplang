@@ -1,3 +1,5 @@
+use(std) println
+
 struct Person {
     val name: str,
     val age: u8

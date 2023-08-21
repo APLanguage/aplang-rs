@@ -90,4 +90,15 @@ impl Scopes {
             .get(scope.node)
             .and_then(|node| node.parent().map(|node| ScopeId { node }))
     }
+
+    pub fn scope_children(&self, scope_id: ScopeId) -> Option<Vec<ScopeId>> {
+        let mut node_opt = self.tree.get(scope_id.node)?.first_child();
+        let mut scope_ids = vec![];
+        while let Some(node_id) = node_opt {
+            let node = self.tree.get(node_id)?;
+            scope_ids.push(ScopeId { node: node_id });
+            node_opt = node.next_sibling();
+        }
+        Some(scope_ids)
+    }
 }

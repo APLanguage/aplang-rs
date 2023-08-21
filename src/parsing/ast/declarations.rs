@@ -18,7 +18,7 @@ type NameTypeTuple = (Spanned<Spur>, Infoed<ParsedType>);
 pub enum UsePathEnd {
     Split(Box<[UsePath]>),
     Star(SimpleSpan),
-    Single,
+    Single(Option<Spanned<Spur>>),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -37,22 +37,34 @@ pub struct UseDeclaration {
     pub path: UsePath,
 }
 
+pub struct FlatUseDeclaration {
+    pub path: Box<[SimpleSpan]>,
+    pub star: bool,
+    pub single_alias: Option<Spanned<Spur>>,
+}
+
 impl UseDeclaration {
-    pub fn flatten_tree(&self) -> impl Iterator<Item = (Box<[SimpleSpan]>, bool)> + '_ {
+    pub fn flatten_tree(&self) -> impl Iterator<Item = FlatUseDeclaration> + '_ {
         use UsePathEnd::*;
         DftLongestPaths::new(&self.path, |node: &UsePath| match &node.1 {
-            Star(_) | Single => Either::Left(empty()),
+            Star(_) | Single(_) => Either::Left(empty()),
             Split(branches) => Either::Right(branches.iter()),
         })
         .map(|path| {
             let star = path.last().map(|p| matches!(p.1, Star(_))).unwrap_or(false);
-            (
-                path.iter()
+            let single_alias = match path.last() {
+                Some(UsePath(_, Single(alias))) => alias.clone(),
+                _ => None,
+            };
+            FlatUseDeclaration {
+                path: path
+                    .iter()
                     .flat_map(|p| p.0.clone().to_vec())
                     .collect::<Vec<_>>()
                     .into_boxed_slice(),
                 star,
-            )
+                single_alias,
+            }
         })
     }
 }

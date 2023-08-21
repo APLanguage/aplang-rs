@@ -3,9 +3,9 @@ pub mod name_resolver;
 pub mod readers;
 pub mod scopes;
 
-use std::{collections::HashMap, hash::Hash, path::Path};
+use std::{collections::HashMap, hash::Hash, path::Path, slice::Iter, vec};
 
-use crate::parsing::ast::declarations::Variable;
+use crate::parsing::{ast::declarations::Variable, utilities::Spanned};
 use chumsky::span::SimpleSpan;
 use either::Either;
 use lasso::Spur;
@@ -15,7 +15,7 @@ use crate::parsing::ast::declarations::{Function, Struct, UseDeclaration};
 
 use self::{
     files::APLangWorkspaceFile,
-    scopes::{ScopeId, ScopeType, Scopes},
+    scopes::{ScopeId, Scopes},
 };
 
 new_key_type! { pub struct FunctionId; }
@@ -33,7 +33,7 @@ pub struct Workspace {
 }
 
 impl Workspace {
-    fn project(&self) -> &Project {
+    pub fn project(&self) -> &Project {
         &self
             .dependencies
             .get_dependency(self._project)
@@ -41,7 +41,7 @@ impl Workspace {
             .project
     }
 
-    fn project_mut(&mut self) -> &mut Project {
+    pub fn project_mut(&mut self) -> &mut Project {
         &mut self
             .dependencies
             .get_dependency_mut(self._project)
@@ -49,7 +49,7 @@ impl Workspace {
             .project
     }
 
-    fn project_dep_id(&self) -> DependencyId {
+    pub fn project_dep_id(&self) -> DependencyId {
         self._project.clone()
     }
 }
@@ -119,15 +119,14 @@ pub struct AstFiles {
 }
 #[derive(Debug)]
 pub struct UseTargetSingle {
-    pub name: Spur,
+    pub name: Option<Spanned<Spur>>,
     pub scope: ScopeId,
 }
 
 #[derive(Debug)]
 pub struct UseTargetStar {
-    pub name: Spur,
     pub scope: ScopeId,
-    pub end_targets: Box<[(Spur, ScopeId)]>,
+    pub end_targets: Box<[ScopeId]>,
 }
 
 #[derive(Debug)]
@@ -136,7 +135,7 @@ pub enum UseTarget {
     UseTargetSingle(UseTargetSingle),
 }
 
-pub type ResolvedUsesInDependency = (Vec<UseTargetStar>, Vec<UseTargetSingle>);
+pub struct ResolvedUsesInDependency(Vec<UseTargetStar>, Vec<UseTargetSingle>);
 
 pub struct DependencyInfo {
     name: Spur,
@@ -171,13 +170,13 @@ impl Dependencies {
         self.deps.insert(info)
     }
 
-    fn get_dependency_by_name(&self, name: &[Spur]) -> Option<DependencyId> {
+    fn get_dependency_by_name(&self, name: &[Spur]) -> Result<DependencyId, usize> {
         if name.len() != 1 {
             todo!("Dependencies#get_dependency_by_name: multi project workspaces")
         }
         self.by_name
             .get(name.get(0).unwrap())
-            .map(DependencyId::clone)
+            .map(DependencyId::clone).ok_or(0)
     }
 
     fn get_dependency_scope(&self, dependency_id: DependencyId) -> Option<&Scopes> {
@@ -185,22 +184,55 @@ impl Dependencies {
     }
 }
 
-#[derive(Debug)]
 pub struct ResolvedUses {
     uses: HashMap<DependencyId, ResolvedUsesInDependency>,
     errors: Vec<SimpleSpan>,
 }
+
+impl std::fmt::Debug for ResolvedUses {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ResolvedUses")
+            .field("uses_amount", &self.uses.len())
+            .field("errors_amount", &self.errors.len())
+            .finish()
+    }
+}
 impl ResolvedUses {
-    fn new() -> Self {
-        todo!("ResolvedUses#new")
+    pub(crate) fn new() -> Self {
+        ResolvedUses {
+            uses: HashMap::new(),
+            errors: vec![],
+        }
     }
 
-    fn add(&mut self, dependency_id: DependencyId, scope_id: ScopeId, star: bool) {
-        todo!("ResolvedUses#add")
+    pub(crate) fn add(&mut self, dependency_id: DependencyId, target: UseTarget) {
+        match self.uses.get_mut(&dependency_id) {
+            Some(ruid) => {
+                match target {
+                    UseTarget::UseTargetStar(t) => ruid.0.push(t),
+                    UseTarget::UseTargetSingle(t) => ruid.1.push(t),
+                };
+            }
+            None => {
+                self.uses.insert(dependency_id, {
+                    let (vec_star, vec_single) = match target {
+                        UseTarget::UseTargetStar(t) => (vec![t], vec![]),
+                        UseTarget::UseTargetSingle(t) => (vec![], vec![t]),
+                    };
+                    ResolvedUsesInDependency(vec_star, vec_single)
+                });
+            }
+        }
     }
 
-    fn add_error(&mut self, span: SimpleSpan) {
-        self.errors.push(span)
+    pub(crate) fn add_error(&mut self, span: SimpleSpan) {
+        if !self.errors.contains(&span) {
+            self.errors.push(span)
+        }
+    }
+
+    pub fn iter_err(&self) -> Iter<'_, SimpleSpan> {
+        return self.errors.iter();
     }
 }
 

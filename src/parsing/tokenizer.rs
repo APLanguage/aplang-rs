@@ -30,9 +30,12 @@ pub enum Identifier {
 
     #[token("use")]
     Use,
+    #[regex("as")]
+    As,
 
     #[regex(".+")]
     Custom,
+
 }
 
 fn string_parser_callback(lex: &mut Lexer<Token>) -> Option<StringLiteralType> {
