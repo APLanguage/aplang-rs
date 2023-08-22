@@ -101,7 +101,7 @@ pub struct Function {
 pub struct Variable {
     pub reassignable: Spanned<bool>,
     pub name: Spanned<Spur>,
-    pub ty: Option<Infoed<ParsedType>>,
+    pub ty: Option<Spanned<ParsedType>>,
     pub expression: Infoed<Expression>,
 }
 

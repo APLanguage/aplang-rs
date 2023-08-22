@@ -4,7 +4,7 @@ pub mod scopes;
 
 use std::{collections::HashMap, hash::Hash, path::Path, slice::Iter, vec};
 
-use crate::{parsing::{ast::declarations::Variable, utilities::Spanned}, resolution::name_resolver::ResolvedFunctionOutline};
+use crate::{parsing::{ast::declarations::Variable, utilities::Spanned}, resolution::name_resolver::{ResolvedFunctionOutline, ResolvedVariableOutline, ResolvedStructOutline}};
 use chumsky::span::SimpleSpan;
 use either::Either;
 use lasso::Spur;
@@ -73,8 +73,8 @@ pub enum DeclarationDelegate {
 
 pub struct DeclarationPool {
     pub functions: SlotMap<FunctionId, DeclarationInfo<Function, ResolvedFunctionOutline>>,
-    pub structs: SlotMap<StructId, DeclarationInfo<Struct>>,
-    pub variables: SlotMap<VariableId, DeclarationInfo<Variable>>,
+    pub structs: SlotMap<StructId, DeclarationInfo<Struct, ResolvedStructOutline>>,
+    pub variables: SlotMap<VariableId, DeclarationInfo<Variable, ResolvedVariableOutline>>,
     pub declarations: SlotMap<DeclarationId, DeclarationDelegate>,
 }
 

@@ -129,9 +129,9 @@ fn main() {
         }
         if is_errors {
             println!("Errors found, cannot go further.");
-            for (spur, s) in rodeo.into_iter() {
-                println!("  {spur:>3?}: {s}")
-            }
+            // for (spur, s) in rodeo.into_iter() {
+            //     println!("  {spur:>3?}: {s}")
+            // }
             return;
         }
         println!("No use resolution errors found.")

@@ -88,7 +88,7 @@ pub fn variable_parser<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, Varia
             .labelled("var-name"),
         just(Token::Colon)
             .paddedln()
-            .ignore_then(type_parser().infoed().paddedln().labelled("var-type"))
+            .ignore_then(type_parser().spanned().paddedln().labelled("var-type"))
             .or_not()
             .labelled("var-colon-type"),
         just(Token::Equal).paddedln(),

@@ -9,12 +9,12 @@ use thiserror::Error;
 
 use crate::{
     parsing::{
-        ast::declarations::{Declaration, Function, Struct, Variable},
+        ast::declarations::Declaration,
         parsers::{file::file_parser, ParserState},
         tokenizer::{tokenize, Token},
     },
     source::{RefVirtualFile, SourceFile},
-    utils::walkdir::{WalkAction, WalkDir}, resolution::name_resolver::ResolvedFunctionOutline,
+    utils::walkdir::{WalkAction, WalkDir},
 };
 
 use super::{
@@ -73,9 +73,9 @@ pub enum ReadProjectResult {
 
 fn read_project(rodeo: &mut Rodeo, path: &Path) -> ReadProjectResult {
     let (files, mut scopes) = read_files(rodeo, path);
-    let mut functions = SlotMap::<FunctionId, DeclarationInfo<Function, ResolvedFunctionOutline>>::with_key();
-    let mut structs = SlotMap::<StructId, DeclarationInfo<Struct>>::with_key();
-    let mut variables = SlotMap::<VariableId, DeclarationInfo<Variable>>::with_key();
+    let mut functions = SlotMap::<FunctionId, _>::with_key();
+    let mut structs = SlotMap::<StructId, _>::with_key();
+    let mut variables = SlotMap::<VariableId, _>::with_key();
     let mut declaration_delegates = SlotMap::<DeclarationId, DeclarationDelegate>::with_key();
 
     let mut modules = SlotMap::<ModuleId, ModuleData>::with_key();
@@ -132,7 +132,7 @@ fn read_project(rodeo: &mut Rodeo, path: &Path) -> ReadProjectResult {
                         )
                     }
                     Declaration::Struct(s) => {
-                        let name = dbg!(s.name.0);
+                        let name = s.name.0;
                         let id = structs.insert(DeclarationInfo {
                             decl: DeclarationResolutionStage {
                                 ast: s,

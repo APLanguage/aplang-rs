@@ -6,13 +6,13 @@ use itertools::Itertools;
 use lasso::Rodeo;
 use logos::Source;
 
-use crate::parsing::ast::declarations::{FlatUseDeclaration, Function};
+use crate::parsing::ast::declarations::{FlatUseDeclaration, Function, Struct, Variable};
 use crate::parsing::ast::ParsedType;
 
 use crate::parsing::utilities::Spanned;
 use crate::project::{
-    DeclarationResolutionStage, FileId, FunctionId, ModuleId, ResolvedUses, UseTarget,
-    UseTargetSingle, UseTargetStar, Workspace,
+    FileId, FunctionId, ModuleId, ResolvedUses, StructId, UseTarget,
+    UseTargetSingle, UseTargetStar, VariableId, Workspace,
 };
 use crate::source::DeclarationPath;
 
@@ -115,8 +115,25 @@ pub struct ResolvedFunctionOutline {
     ret_ty: Option<Result<DeclarationPath, SimpleSpan>>,
 }
 
+#[derive(Debug)]
+pub struct ResolvedVariableOutline {
+    ty: Option<Result<DeclarationPath, SimpleSpan>>,
+}
+
+#[derive(Debug)]
+pub struct ResolvedStructOutline {
+    fields: Box<[Result<DeclarationPath, SimpleSpan>]>,
+}
+
 pub fn resolve_workspace_outlines(workspace: &mut Workspace) -> HashMap<FileId, Vec<SimpleSpan>> {
-    resolve_function_outline(workspace)
+    let func_errs = resolve_function_outline(workspace);
+    let var_errs = resolve_variable_outline(workspace);
+    let struct_errs = resolve_struct_outline(workspace);
+    let mut errs = HashMap::new();
+    for (k, v) in func_errs.into_iter().chain(var_errs).chain(struct_errs) {
+        errs.insert(k, v);
+    }
+    errs
 }
 
 pub fn resolve_function_outline(workspace: &mut Workspace) -> HashMap<FileId, Vec<SimpleSpan>> {
@@ -135,52 +152,13 @@ pub fn resolve_function_outline(workspace: &mut Workspace) -> HashMap<FileId, Ve
             Left(_) => panic!("Should've been resolved"),
             Right(resolved) => resolved,
         };
-        let DeclarationResolutionStage {
-            ast: Function { parameters, ty, .. },
-            ..
-        } = &func.decl;
-        let parameters = parameters
-            .iter()
-            .map(|param| {
-                let Spanned(ty, span) = &param.ty;
-                match ty {
-                    ParsedType::Data(name_to_find) => {
-                        if let Some((dep_id, _, dec_id, _)) = resolved
-                            .find_struct(&workspace_read.dependencies, name_to_find.0)
-                            .next()
-                        {
-                            Ok(DeclarationPath {
-                                module_id: dep_id,
-                                declaration_id: dec_id,
-                            })
-                        } else {
-                            Err(*span)
-                        }
-                    }
-                    ParsedType::Array(_) => todo!("array type resolution"),
-                }
-            })
-            .collect_vec()
-            .into_boxed_slice();
-        let ret_ty = match ty {
-            Some(Spanned(t, s)) => {
-                let name_to_search = match t {
-                    ParsedType::Data(Spanned(name_to_search, _)) => *name_to_search,
-                    ParsedType::Array(_) => todo!("array type resolution"),
-                };
-                Some(
-                    resolved
-                        .find_struct(&workspace_read.dependencies, name_to_search)
-                        .next()
-                        .map(|(dep_id, _, dec_id, _)| DeclarationPath {
-                            module_id: dep_id,
-                            declaration_id: dec_id,
-                        })
-                        .ok_or(*s),
-                )
-            }
-            None => None,
-        };
+        let Function { parameters, ty, .. } = &func.decl.ast;
+        let parameters: Box<[Result<DeclarationPath, SimpleSpan>]> = resolve_multiple(
+            parameters.iter().map(|param| &param.ty),
+            resolved,
+            workspace_read,
+        );
+        let ret_ty = resolve_singular(ty, resolved, workspace_read);
         for e in parameters
             .iter()
             .filter_map(|r| r.err())
@@ -202,4 +180,128 @@ pub fn resolve_function_outline(workspace: &mut Workspace) -> HashMap<FileId, Ve
         }
     }
     errors
+}
+
+fn resolve_singular(
+    ty: &Option<Spanned<ParsedType>>,
+    resolved: &ResolvedUses,
+    workspace_read: &Workspace,
+) -> Option<Result<DeclarationPath, SimpleSpan>> {
+    match ty {
+        Some(Spanned(t, s)) => {
+            let name_to_search = match t {
+                ParsedType::Data(Spanned(name_to_search, _)) => *name_to_search,
+                ParsedType::Array(_) => todo!("array type resolution"),
+            };
+            Some(
+                resolved
+                    .find_struct(&workspace_read.dependencies, name_to_search)
+                    .next()
+                    .map(|(dep_id, _, dec_id, _)| DeclarationPath {
+                        module_id: dep_id,
+                        declaration_id: dec_id,
+                    })
+                    .ok_or(*s),
+            )
+        }
+        None => None,
+    }
+}
+
+pub fn resolve_variable_outline(workspace: &mut Workspace) -> HashMap<FileId, Vec<SimpleSpan>> {
+    let project = workspace.project();
+    let workspace_read: &Workspace = workspace;
+    let mut errors = HashMap::<FileId, Vec<SimpleSpan>>::new();
+    let mut to_update = HashMap::<VariableId, ResolvedVariableOutline>::new();
+
+    for (var_id, var) in project.pool.variables.iter() {
+        let resolved = match &project.src.get_module_by_file(var.file_id).unwrap().imports {
+            Left(_) => panic!("Should've been resolved"),
+            Right(resolved) => resolved,
+        };
+        let Variable { ty, .. } = &var.decl.ast;
+        let ty = resolve_singular(ty, resolved, workspace_read);
+        if let Some(e) = ty.and_then(|r| r.err().to_owned()) {
+            match errors.get_mut(&var.file_id) {
+                Some(v) => v.push(e),
+                None => {
+                    errors.insert(var.file_id, vec![e]);
+                }
+            }
+        }
+        to_update.insert(var_id, ResolvedVariableOutline { ty });
+    }
+
+    for (var_id, outline) in to_update.into_iter() {
+        if let Some(func_info) = workspace.project_mut().pool.variables.get_mut(var_id) {
+            func_info.decl.outline = Some(outline);
+        }
+    }
+    errors
+}
+
+pub fn resolve_struct_outline(workspace: &mut Workspace) -> HashMap<FileId, Vec<SimpleSpan>> {
+    let project = workspace.project();
+    let workspace_read: &Workspace = workspace;
+    let mut errors = HashMap::<FileId, Vec<SimpleSpan>>::new();
+    let mut to_update = HashMap::<StructId, ResolvedStructOutline>::new();
+
+    for (struct_id, strct) in project.pool.structs.iter() {
+        let resolved = match &project
+            .src
+            .get_module_by_file(strct.file_id)
+            .unwrap()
+            .imports
+        {
+            Left(_) => panic!("Should've been resolved"),
+            Right(resolved) => resolved,
+        };
+        let Struct { fields, .. } = &strct.decl.ast;
+        let fields = resolve_multiple(
+            fields.iter().map(|field| &field.ty),
+            resolved,
+            workspace_read,
+        );
+        for e in fields.iter().filter_map(|r| r.err()) {
+            match errors.get_mut(&strct.file_id) {
+                Some(v) => v.push(e),
+                None => {
+                    errors.insert(strct.file_id, vec![e]);
+                }
+            }
+        }
+        to_update.insert(struct_id, ResolvedStructOutline { fields });
+    }
+    for (struct_id, outline) in to_update.into_iter() {
+        if let Some(func_info) = workspace.project_mut().pool.structs.get_mut(struct_id) {
+            func_info.decl.outline = Some(outline);
+        }
+    }
+    errors
+}
+
+fn resolve_multiple<'a, I: Iterator<Item = &'a Spanned<ParsedType>>>(
+    fields: I,
+    resolved: &ResolvedUses,
+    workspace_read: &Workspace,
+) -> Box<[Result<DeclarationPath, SimpleSpan>]> {
+    fields
+        .map(|Spanned(ty, span)| match ty {
+            ParsedType::Data(name_to_find) => {
+                if let Some((dep_id, _, dec_id, _)) = resolved
+                    .find_struct(&workspace_read.dependencies, name_to_find.0)
+                    .next()
+                {
+                    Ok(DeclarationPath {
+                        module_id: dep_id,
+                        declaration_id: dec_id,
+                    })
+                } else {
+                    Err(*span)
+                }
+            }
+            ParsedType::Array(_) => todo!("array type resolution"),
+        })
+        .collect_vec()
+        .into_boxed_slice()
 }
