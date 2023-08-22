@@ -1,4 +1,3 @@
-use(my-project) main::Person as Test
 use(std) std::*
 
 struct Person {
@@ -6,7 +5,7 @@ struct Person {
     val age: u8
 }
 
-fn test_person(person: Test) {
+fn test_person(person: Person) {
     println(r##"Hello "## + person.name + r", age " + str(person.age))
 }
 

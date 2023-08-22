@@ -45,6 +45,13 @@ impl Scopes {
         self.tree.get(id.node).map(Node::get)
     }
 
+    pub fn scope_as_declaration(&self, id: ScopeId) -> Option<(Spur, DeclarationId)> {
+        match self.tree.get(id.node).map(Node::get) {
+            Some(ScopeType::Declaration(name, id)) => Some((*name, *id)),
+            _ => None,
+        }
+    }
+
     pub fn scope_child_by_name(&self, id: ScopeId, name: Spur) -> Option<ScopeId> {
         let mut node_opt = self.tree.get(id.node)?.first_child();
         while let Some(node_id) = node_opt {
@@ -113,6 +120,29 @@ impl Scopes {
         while let Some(node_id) = node_opt {
             let node = self.tree.get(node_id)?;
             scope_ids.push(ScopeId { node: node_id });
+            node_opt = node.next_sibling();
+        }
+        Some(scope_ids)
+    }
+
+    pub fn scope_children_by_name(
+        &self,
+        scope_id: ScopeId,
+        name_to_search: Spur,
+    ) -> Option<Vec<ScopeId>> {
+        let mut node_opt = self.tree.get(scope_id.node)?.first_child();
+        let mut scope_ids = vec![];
+        while let Some(node_id) = node_opt {
+            let node = self.tree.get(node_id)?;
+            let name = *match node.get() {
+                ScopeType::Declaration(spur, _) => spur,
+                ScopeType::File(spur, _) => spur,
+                ScopeType::Package(spur) => spur,
+                ScopeType::Root(_) => unreachable!(),
+            };
+            if name == name_to_search {
+                scope_ids.push(ScopeId { node: node_id });
+            }
             node_opt = node.next_sibling();
         }
         Some(scope_ids)

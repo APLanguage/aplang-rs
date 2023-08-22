@@ -1,6 +1,5 @@
 use std::path::Path;
 
-use indextree::Arena as IndexArena;
 use lasso::Rodeo;
 use slotmap::SlotMap;
 

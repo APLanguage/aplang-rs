@@ -142,12 +142,11 @@ pub fn resolve_function_outline(workspace: &mut Workspace) -> HashMap<FileId, Ve
     let mut to_update = HashMap::<FunctionId, ResolvedFunctionOutline>::new();
 
     for (func_id, func) in project.pool.functions.iter() {
-        let resolved = match &project
+        let module = &project
             .src
             .get_module_by_file(func.file_id)
-            .unwrap()
-            .imports
-        {
+            .expect("BUG: a module should've been created for the file");
+        let resolved = match &module.imports {
             Left(_) => panic!("Should've been resolved"),
             Right(resolved) => resolved,
         };
@@ -156,8 +155,9 @@ pub fn resolve_function_outline(workspace: &mut Workspace) -> HashMap<FileId, Ve
             parameters.iter().map(|param| &param.ty),
             resolved,
             workspace_read,
+            func.file_id,
         );
-        let ret_ty = resolve_singular(ty, resolved, workspace_read);
+        let ret_ty = resolve_singular(ty, resolved, workspace_read, func.file_id);
         for e in parameters
             .iter()
             .filter_map(|r| r.err())
@@ -181,32 +181,6 @@ pub fn resolve_function_outline(workspace: &mut Workspace) -> HashMap<FileId, Ve
     errors
 }
 
-fn resolve_singular(
-    ty: &Option<Spanned<ParsedType>>,
-    resolved: &ResolvedUses,
-    workspace_read: &Workspace,
-) -> Option<Result<DeclarationPath, SimpleSpan>> {
-    match ty {
-        Some(Spanned(t, s)) => {
-            let name_to_search = match t {
-                ParsedType::Data(Spanned(name_to_search, _)) => *name_to_search,
-                ParsedType::Array(_) => todo!("array type resolution"),
-            };
-            Some(
-                resolved
-                    .find_struct(&workspace_read.dependencies, name_to_search)
-                    .next()
-                    .map(|(dep_id, _, dec_id, _)| DeclarationPath {
-                        module_id: dep_id,
-                        declaration_id: dec_id,
-                    })
-                    .ok_or(*s),
-            )
-        }
-        None => None,
-    }
-}
-
 pub fn resolve_variable_outline(workspace: &mut Workspace) -> HashMap<FileId, Vec<SimpleSpan>> {
     let project = workspace.project();
     let workspace_read: &Workspace = workspace;
@@ -214,12 +188,16 @@ pub fn resolve_variable_outline(workspace: &mut Workspace) -> HashMap<FileId, Ve
     let mut to_update = HashMap::<VariableId, ResolvedVariableOutline>::new();
 
     for (var_id, var) in project.pool.variables.iter() {
-        let resolved = match &project.src.get_module_by_file(var.file_id).unwrap().imports {
+        let module = &project
+            .src
+            .get_module_by_file(var.file_id)
+            .expect("BUG: a module should've been created for the file");
+        let resolved = match &module.imports {
             Left(_) => panic!("Should've been resolved"),
             Right(resolved) => resolved,
         };
         let Variable { ty, .. } = &var.decl.ast;
-        let ty = resolve_singular(ty, resolved, workspace_read);
+        let ty = resolve_singular(ty, resolved, workspace_read, var.file_id);
         if let Some(e) = ty.and_then(|r| r.err().to_owned()) {
             match errors.get_mut(&var.file_id) {
                 Some(v) => v.push(e),
@@ -246,12 +224,11 @@ pub fn resolve_struct_outline(workspace: &mut Workspace) -> HashMap<FileId, Vec<
     let mut to_update = HashMap::<StructId, ResolvedStructOutline>::new();
 
     for (struct_id, strct) in project.pool.structs.iter() {
-        let resolved = match &project
+        let module = &project
             .src
             .get_module_by_file(strct.file_id)
-            .unwrap()
-            .imports
-        {
+            .expect("BUG: a module should've been created for the file");
+        let resolved = match &module.imports {
             Left(_) => panic!("Should've been resolved"),
             Right(resolved) => resolved,
         };
@@ -260,6 +237,7 @@ pub fn resolve_struct_outline(workspace: &mut Workspace) -> HashMap<FileId, Vec<
             fields.iter().map(|field| &field.ty),
             resolved,
             workspace_read,
+            strct.file_id,
         );
         for e in fields.iter().filter_map(|r| r.err()) {
             match errors.get_mut(&strct.file_id) {
@@ -279,16 +257,74 @@ pub fn resolve_struct_outline(workspace: &mut Workspace) -> HashMap<FileId, Vec<
     errors
 }
 
+fn resolve_singular(
+    ty: &Option<Spanned<ParsedType>>,
+    resolved: &ResolvedUses,
+    workspace_read: &Workspace,
+    file_id: FileId,
+) -> Option<Result<DeclarationPath, SimpleSpan>> {
+    let dependency_id = workspace_read.project_dep_id();
+    let scopes = &workspace_read.project().scopes;
+    let scope = scopes.scope_of_file(file_id).unwrap();
+    match ty {
+        Some(Spanned(t, s)) => {
+            let name_for_search = match t {
+                ParsedType::Data(Spanned(name_for_search, _)) => *name_for_search,
+                ParsedType::Array(_) => todo!("array type resolution"),
+            };
+            Some(
+                scopes
+                    .scope_children_by_name(scope, name_for_search)
+                    .into_iter()
+                    .flatten()
+                    .filter_map(|scope_id| {
+                        scopes
+                            .scope_as_declaration(scope_id)
+                            .map(|(_name, dec_id)| (dependency_id, dec_id))
+                    })
+                    .chain(
+                        resolved
+                            .find_struct(&workspace_read.dependencies, name_for_search)
+                            .map(|(dep_id, _, dec_id, _)| (dep_id, dec_id)),
+                    )
+                    .next()
+                    .map(|(dep_id, dec_id)| DeclarationPath {
+                        module_id: dep_id,
+                        declaration_id: dec_id,
+                    })
+                    .ok_or(*s),
+            )
+        }
+        None => None,
+    }
+}
+
 fn resolve_multiple<'a, I: Iterator<Item = &'a Spanned<ParsedType>>>(
     fields: I,
     resolved: &ResolvedUses,
     workspace_read: &Workspace,
+    file_id: FileId,
 ) -> Box<[Result<DeclarationPath, SimpleSpan>]> {
+    let dependency_id = workspace_read.project_dep_id();
+    let scopes = &workspace_read.project().scopes;
+    let scope = scopes.scope_of_file(file_id).unwrap();
     fields
         .map(|Spanned(ty, span)| match ty {
             ParsedType::Data(name_to_find) => {
-                if let Some((dep_id, _, dec_id, _)) = resolved
-                    .find_struct(&workspace_read.dependencies, name_to_find.0)
+                if let Some((dep_id, dec_id)) = scopes
+                    .scope_children_by_name(scope, name_to_find.0)
+                    .into_iter()
+                    .flatten()
+                    .filter_map(|scope_id| {
+                        scopes
+                            .scope_as_declaration(scope_id)
+                            .map(|(_name, dec_id)| (dependency_id, dec_id))
+                    })
+                    .chain(
+                        resolved
+                            .find_struct(&workspace_read.dependencies, name_to_find.0)
+                            .map(|(dep_id, _, dec_id, _)| (dep_id, dec_id)),
+                    )
                     .next()
                 {
                     Ok(DeclarationPath {
