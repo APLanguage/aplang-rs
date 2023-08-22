@@ -1,13 +1,16 @@
-use(my-project) main::Person
-use(not-my-project) println
+use(my-project) main::Person as Test
 
 struct Person {
     val name: str,
     val age: u8
 }
 
+fn test_person(person: Test) {
+    println(r"Hello " + person.name + r", age " + str(person.age))
+}
+
 fn main() {
     println(r"Hello World!")
     val person = Person(r"Amejonah", 42)
-    println(r"Hello " + person.name + r", age " + str(person.age))
+    test_person(person)
 }

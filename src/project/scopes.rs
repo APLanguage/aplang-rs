@@ -128,7 +128,7 @@ impl Scopes {
             .map(|&node| ScopeId { node })
     }
 
-    pub(crate) fn scope_name(&self, scope_id: ScopeId) -> Option<Spur> {
+    pub fn scope_name(&self, scope_id: ScopeId) -> Option<Spur> {
         self.tree.get(scope_id.node).map(|node| *match node.get() {
             ScopeType::Declaration(spur, _) => spur,
             ScopeType::File(spur, _) => spur,

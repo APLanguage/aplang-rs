@@ -4,7 +4,7 @@ pub mod scopes;
 
 use std::{collections::HashMap, hash::Hash, path::Path, slice::Iter, vec};
 
-use crate::parsing::{ast::declarations::Variable, utilities::Spanned};
+use crate::{parsing::{ast::declarations::Variable, utilities::Spanned}, resolution::name_resolver::ResolvedFunctionOutline};
 use chumsky::span::SimpleSpan;
 use either::Either;
 use lasso::Spur;
@@ -14,7 +14,7 @@ use crate::parsing::ast::declarations::{Function, Struct, UseDeclaration};
 
 use self::{
     files::APLangWorkspaceFile,
-    scopes::{ScopeId, Scopes},
+    scopes::{ScopeId, ScopeType, Scopes},
 };
 
 new_key_type! { pub struct FunctionId; }
@@ -53,9 +53,15 @@ impl Workspace {
     }
 }
 
-pub struct DeclarationInfo<D> {
-    decl: D,
-    file_id: FileId,
+pub struct DeclarationResolutionStage<D, D2, D3> {
+    pub ast: D,
+    pub outline: Option<D2>,
+    pub full: Option<D3>,
+}
+
+pub struct DeclarationInfo<D, D2 = (), D3 = ()> {
+    pub decl: DeclarationResolutionStage<D, D2, D3>,
+    pub file_id: FileId,
 }
 
 #[derive(Debug)]
@@ -66,10 +72,48 @@ pub enum DeclarationDelegate {
 }
 
 pub struct DeclarationPool {
-    pub functions: SlotMap<FunctionId, DeclarationInfo<Function>>,
+    pub functions: SlotMap<FunctionId, DeclarationInfo<Function, ResolvedFunctionOutline>>,
     pub structs: SlotMap<StructId, DeclarationInfo<Struct>>,
     pub variables: SlotMap<VariableId, DeclarationInfo<Variable>>,
     pub declarations: SlotMap<DeclarationId, DeclarationDelegate>,
+}
+
+impl DeclarationPool {
+    pub fn declaration_id_of_func(&self, func_id: FunctionId) -> Option<DeclarationId> {
+        for declr in self.declarations.iter() {
+            let (id, DeclarationDelegate::Function(f_id)) = declr else {
+                continue;
+            };
+            if func_id == *f_id {
+                return Some(id);
+            }
+        }
+        None
+    }
+
+    pub fn declaration_id_of_var(&self, var_id: VariableId) -> Option<DeclarationId> {
+        for declr in self.declarations.iter() {
+            let (id, DeclarationDelegate::Variable(v_id)) = declr else {
+                continue;
+            };
+            if var_id == *v_id {
+                return Some(id);
+            }
+        }
+        None
+    }
+
+    pub fn declaration_id_of_struct(&self, strct_id: StructId) -> Option<DeclarationId> {
+        for declr in self.declarations.iter() {
+            let (id, DeclarationDelegate::Struct(s_id)) = declr else {
+                continue;
+            };
+            if strct_id == *s_id {
+                return Some(id);
+            }
+        }
+        None
+    }
 }
 
 pub trait File {
@@ -116,6 +160,28 @@ pub struct Project {
 
 pub struct AstFiles {
     pub files: SlotMap<ModuleId, ModuleData>,
+    pub by_file: HashMap<FileId, ModuleId>,
+}
+
+impl AstFiles {
+    fn new(modules: SlotMap<ModuleId, ModuleData>) -> AstFiles {
+        let mut map = HashMap::<FileId, ModuleId>::new();
+        for (m_id, m) in modules.iter() {
+            map.insert(m.file_id, m_id);
+        }
+        AstFiles {
+            files: modules,
+            by_file: map,
+        }
+    }
+
+    pub fn get_module_by_file(&self, file_id: FileId) -> Option<&ModuleData> {
+        self.files.get(*self.by_file.get(&file_id)?)
+    }
+
+    pub fn get_module_by_file_mut(&mut self, file_id: FileId) -> Option<&mut ModuleData> {
+        self.files.get_mut(*self.by_file.get(&file_id)?)
+    }
 }
 #[derive(Debug)]
 pub struct UseTargetSingle {
@@ -139,8 +205,8 @@ pub enum UseTarget {
 pub struct ResolvedUsesInDependency(Vec<UseTargetStar>, Vec<UseTargetSingle>);
 
 pub struct DependencyInfo {
-    name: Spur,
-    project: Project,
+    pub name: Spur,
+    pub project: Project,
 }
 
 pub struct Dependencies {
@@ -255,6 +321,28 @@ impl ResolvedUses {
                         .map(|&id| (*dep_id, id))
                 },
             ))
+    }
+
+    pub fn find_struct<'a>(
+        &'a self,
+        dependencies: &'a Dependencies,
+        name: Spur,
+    ) -> impl Iterator<Item = (DependencyId, ScopeId, DeclarationId, StructId)> + '_ {
+        self.find(name).filter_map(|(dep_id, scope_id)| {
+            let dep_info = dependencies.get_dependency(dep_id)?;
+            let scopes = &dep_info.project.scopes;
+
+            let ScopeType::Declaration(_, dec_id) = scopes.scope(scope_id)? else {
+                return None;
+            };
+
+            let DeclarationDelegate::Struct(struct_id) =
+                dep_info.project.pool.declarations.get(*dec_id)?
+            else {
+                return None;
+            };
+            Some((dep_id, scope_id, *dec_id, *struct_id))
+        })
     }
 }
 

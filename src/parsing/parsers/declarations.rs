@@ -24,7 +24,7 @@ fn field_parser<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, Field> {
         ident().spur().map_with_span(Spanned),
         just(Token::Colon).paddedln(),
         type_parser()
-            .infoed()
+            .spanned()
             .paddedln()
             .labelled("data-field-type")
             .boxed(),
@@ -65,7 +65,7 @@ pub fn struct_parser<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, Struct>
 pub fn type_parser<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, ParsedType> + Clone {
     recursive(|p| {
         choice((
-            ident().map_with_span(Spanned).map(ParsedType::Data),
+            ident().spur().map_with_span(Spanned).map(ParsedType::Data),
             p.delimited_by(just(Token::BracketOpen), just(Token::BracketClosed))
                 .map(|t| ParsedType::Array(Box::new(t))),
         ))
@@ -123,7 +123,7 @@ fn parameter_parser<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, Paramete
             .labelled("fn-param-name"),
         just(Token::Colon).paddedln().ignored(),
         type_parser()
-            .infoed()
+        .spanned()
             .labelled("fn-param-type")
             .labelled("fn-param")
             .boxed(),
@@ -154,7 +154,7 @@ pub fn function_parser<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, Funct
             just(Token::ArrowRight)
                 .paddedln()
                 .labelled("fn-arrow")
-                .ignore_then(type_parser().infoed().labelled("fn-type"))
+                .ignore_then(type_parser().spanned().labelled("fn-type"))
                 .or_not()
                 .boxed(),
             statement_parser()

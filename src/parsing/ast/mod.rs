@@ -1,6 +1,6 @@
-use crate::typing::TypeId;
+use lasso::Spur;
 
-use super::{utilities::Spanned, tokenizer::Identifier, Infoable};
+use super::{utilities::Spanned, Infoable};
 
 pub mod expressions;
 pub mod statements;
@@ -8,10 +8,10 @@ pub mod declarations;
 
 #[derive(Debug)]
 pub enum ParsedType {
-    Data(Spanned<Identifier>),
+    Data(Spanned<Spur>),
     Array(Box<ParsedType>),
 }
 
 impl Infoable for ParsedType {
-    type Info = TypeId;
+    type Info = ();
 }

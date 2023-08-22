@@ -73,14 +73,14 @@ impl UseDeclaration {
 pub struct Field {
     pub reassignable: Spanned<bool>,
     pub name: Spanned<Spur>,
-    pub ty: Infoed<ParsedType>,
+    pub ty: Spanned<ParsedType>,
 }
 
 #[derive(Debug)]
 pub struct Parameter {
     pub reassignable: Option<Spanned<bool>>,
     pub name: Spanned<Spur>,
-    pub ty: Infoed<ParsedType>,
+    pub ty: Spanned<ParsedType>,
 }
 
 #[derive(Debug)]
@@ -93,7 +93,7 @@ pub struct Struct {
 pub struct Function {
     pub name: Spanned<Spur>,
     pub parameters: Box<[Parameter]>,
-    pub ty: Option<Infoed<ParsedType>>,
+    pub ty: Option<Spanned<ParsedType>>,
     pub statements: Box<[Statement]>,
 }
 

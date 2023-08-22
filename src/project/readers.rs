@@ -14,15 +14,15 @@ use crate::{
         tokenizer::{tokenize, Token},
     },
     source::{RefVirtualFile, SourceFile},
-    utils::walkdir::{WalkAction, WalkDir},
+    utils::walkdir::{WalkAction, WalkDir}, resolution::name_resolver::ResolvedFunctionOutline,
 };
 
 use super::{
     files::APLangWorkspaceFile,
     scopes::{ScopeType, Scopes},
-    AstFiles, DeclarationDelegate, DeclarationId, DeclarationInfo, DeclarationPool, Dependencies,
-    File, FileId, Files, FunctionId, ModuleData, ModuleId, Project, StructId, VariableId,
-    VirtualFile, Workspace,
+    AstFiles, DeclarationDelegate, DeclarationId, DeclarationInfo, DeclarationPool,
+    DeclarationResolutionStage, Dependencies, File, FileId, Files, FunctionId, ModuleData,
+    ModuleId, Project, StructId, VariableId, VirtualFile, Workspace,
 };
 
 #[derive(Debug, Error)]
@@ -73,7 +73,7 @@ pub enum ReadProjectResult {
 
 fn read_project(rodeo: &mut Rodeo, path: &Path) -> ReadProjectResult {
     let (files, mut scopes) = read_files(rodeo, path);
-    let mut functions = SlotMap::<FunctionId, DeclarationInfo<Function>>::with_key();
+    let mut functions = SlotMap::<FunctionId, DeclarationInfo<Function, ResolvedFunctionOutline>>::with_key();
     let mut structs = SlotMap::<StructId, DeclarationInfo<Struct>>::with_key();
     let mut variables = SlotMap::<VariableId, DeclarationInfo<Variable>>::with_key();
     let mut declaration_delegates = SlotMap::<DeclarationId, DeclarationDelegate>::with_key();
@@ -101,7 +101,14 @@ fn read_project(rodeo: &mut Rodeo, path: &Path) -> ReadProjectResult {
                 let (name, id) = match declaration {
                     Declaration::Variable(v) => {
                         let name = v.name.0;
-                        let id = variables.insert(DeclarationInfo { decl: v, file_id });
+                        let id = variables.insert(DeclarationInfo {
+                            decl: DeclarationResolutionStage {
+                                ast: v,
+                                outline: None,
+                                full: None,
+                            },
+                            file_id,
+                        });
                         module_variables.push((name, id));
                         (
                             name,
@@ -110,7 +117,14 @@ fn read_project(rodeo: &mut Rodeo, path: &Path) -> ReadProjectResult {
                     }
                     Declaration::Function(f) => {
                         let name = f.name.0;
-                        let id = functions.insert(DeclarationInfo { decl: f, file_id });
+                        let id = functions.insert(DeclarationInfo {
+                            decl: DeclarationResolutionStage {
+                                ast: f,
+                                outline: None,
+                                full: None,
+                            },
+                            file_id,
+                        });
                         module_functions.push((name, id));
                         (
                             name,
@@ -119,7 +133,14 @@ fn read_project(rodeo: &mut Rodeo, path: &Path) -> ReadProjectResult {
                     }
                     Declaration::Struct(s) => {
                         let name = dbg!(s.name.0);
-                        let id = structs.insert(DeclarationInfo { decl: s, file_id });
+                        let id = structs.insert(DeclarationInfo {
+                            decl: DeclarationResolutionStage {
+                                ast: s,
+                                outline: None,
+                                full: None,
+                            },
+                            file_id,
+                        });
                         module_structs.push((name, id));
                         (
                             name,
@@ -149,7 +170,7 @@ fn read_project(rodeo: &mut Rodeo, path: &Path) -> ReadProjectResult {
     }
 
     ReadProjectResult::Ok(Project {
-        src: AstFiles { files: modules },
+        src: AstFiles::new(modules),
         pool: DeclarationPool {
             functions,
             structs,

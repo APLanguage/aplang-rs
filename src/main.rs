@@ -12,7 +12,7 @@ use crate::{
         readers::{read_workspace, ReadWorkspaceError, ReadWorkspaceResult},
         Workspace,
     },
-    resolution::name_resolver::resolve_uses,
+    resolution::name_resolver::{resolve_uses, resolve_workspace_outlines},
 };
 use chumsky::{error::RichReason, prelude::Rich, primitive::end, ParseResult, Parser};
 use either::Either::{Left, Right};
@@ -104,12 +104,37 @@ fn main() {
         }
         if is_errors {
             println!("Errors found, cannot go further.");
-            // for (spur, s) in rodeo.into_iter() {
-            //     println!("  {spur:>3?}: {s}")
-            // }
-        } else {
-            println!("No use resolution errors found.")
+            return;
         }
+        println!("Resolving outlines...");
+        is_errors = false;
+        for (file_id, errs) in resolve_workspace_outlines(&mut workspace).iter() {
+            is_errors = true;
+            let file = workspace.project().files.file_by_id(*file_id).unwrap();
+            let mut colors = ariadne::ColorGenerator::new();
+            // Generate & choose some colours for each of our elements
+            let input_name = file.path().as_display().to_string();
+            for err in errs {
+                ariadne::Report::build(ariadne::ReportKind::Error, &input_name, err.start)
+                    .with_message("Struct not found.")
+                    .with_label(
+                        ariadne::Label::new((&input_name, err.into_iter()))
+                            .with_message("↑ where 🍌?")
+                            .with_color(colors.next()),
+                    )
+                    .finish()
+                    .print((&input_name, ariadne::Source::from(file.src())))
+                    .unwrap();
+            }
+        }
+        if is_errors {
+            println!("Errors found, cannot go further.");
+            for (spur, s) in rodeo.into_iter() {
+                println!("  {spur:>3?}: {s}")
+            }
+            return;
+        }
+        println!("No use resolution errors found.")
     }
 
     // let mut depth = 0;
