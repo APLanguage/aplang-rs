@@ -1,10 +1,16 @@
 pub mod files;
 pub mod readers;
 pub mod scopes;
+pub mod std_lib;
 
-use std::{collections::HashMap, hash::Hash, path::Path, slice::Iter, vec};
+use std::{collections::HashMap, hash::Hash, path::Path, slice::Iter};
 
-use crate::{parsing::{ast::declarations::Variable, utilities::Spanned}, resolution::name_resolver::{ResolvedFunctionOutline, ResolvedVariableOutline, ResolvedStructOutline}};
+use crate::{
+    parsing::{ast::declarations::Variable, utilities::Spanned},
+    resolution::name_resolver::{
+        ResolvedFunctionOutline, ResolvedStructOutline, ResolvedVariableOutline,
+    },
+};
 use chumsky::span::SimpleSpan;
 use either::Either;
 use lasso::Spur;
@@ -234,7 +240,10 @@ impl Dependencies {
     }
 
     pub fn add_dependency(&mut self, info: DependencyInfo) -> DependencyId {
-        self.deps.insert(info)
+        let name = info.name;
+        let id = self.deps.insert(info);
+        self.by_name.insert(name, id);
+        id
     }
 
     pub fn get_dependency_by_name(&self, name: &[Spur]) -> Result<DependencyId, usize> {

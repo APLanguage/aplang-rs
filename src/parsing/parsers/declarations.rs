@@ -9,7 +9,8 @@ use crate::parsing::{
 };
 use chumsky::{
     primitive::{choice, group, just},
-    recursive::recursive, Parser,
+    recursive::recursive,
+    Parser,
 };
 
 use super::{statements::statement_parser, CollectBoxedSliceExt, TokenParserExt};
@@ -55,6 +56,8 @@ pub fn struct_parser<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, Struct>
                 .collect_boxed_slice()
                 .delimited_by(just(Token::BraceOpen), just(Token::BraceClosed))
                 .labelled("data-fields")
+                .or_not()
+                .map(|f| f.unwrap_or_else(|| Box::new([])))
                 .boxed(),
         )
         .map(|(name, fields)| Struct { name, fields })
@@ -123,7 +126,7 @@ fn parameter_parser<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, Paramete
             .labelled("fn-param-name"),
         just(Token::Colon).paddedln().ignored(),
         type_parser()
-        .spanned()
+            .spanned()
             .labelled("fn-param-type")
             .labelled("fn-param")
             .boxed(),

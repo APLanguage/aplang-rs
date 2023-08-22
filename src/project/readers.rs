@@ -22,7 +22,7 @@ use super::{
     scopes::{ScopeType, Scopes},
     AstFiles, DeclarationDelegate, DeclarationId, DeclarationInfo, DeclarationPool,
     DeclarationResolutionStage, Dependencies, File, FileId, Files, FunctionId, ModuleData,
-    ModuleId, Project, StructId, VariableId, VirtualFile, Workspace,
+    ModuleId, Project, StructId, VariableId, VirtualFile, Workspace, DependencyInfo, std_lib::create_std_lib,
 };
 
 #[derive(Debug, Error)]
@@ -53,12 +53,13 @@ pub fn read_workspace(rodeo: &mut Rodeo, path: &Path) -> ReadWorkspaceResult {
         Ok(f) => f,
         Err(e) => return ReadWorkspaceResult::ErrFile(e),
     };
-    let project = match read_project(rodeo, path) {
+    let project = match read_project(rodeo, path.join("src").as_path()) {
         ReadProjectResult::Err(err, files) => return ReadWorkspaceResult::ErrProject(err, files),
         ReadProjectResult::Ok(p) => p,
     };
-    let (deps, id) =
+    let (mut deps, id) =
         Dependencies::new_from_project(rodeo.get_or_intern(&aplang_file.project.name), project);
+    deps.add_dependency(DependencyInfo { name: rodeo.get_or_intern_static("std"), project: create_std_lib(rodeo) });
     ReadWorkspaceResult::Ok(Workspace {
         aplang_file,
         dependencies: deps,
@@ -71,8 +72,16 @@ pub enum ReadProjectResult {
     Ok(Project),
 }
 
-fn read_project(rodeo: &mut Rodeo, path: &Path) -> ReadProjectResult {
-    let (files, mut scopes) = read_files(rodeo, path);
+pub fn read_project(rodeo: &mut Rodeo, path: &Path) -> ReadProjectResult {
+    let (files, scopes) = read_files(rodeo, path);
+    read_project_from_files(rodeo, files, scopes)
+}
+
+pub fn read_project_from_files(
+    rodeo: &mut Rodeo,
+    files: Files,
+    mut scopes: Scopes,
+) -> ReadProjectResult {
     let mut functions = SlotMap::<FunctionId, _>::with_key();
     let mut structs = SlotMap::<StructId, _>::with_key();
     let mut variables = SlotMap::<VariableId, _>::with_key();
@@ -186,7 +195,7 @@ fn read_files(rodeo: &mut Rodeo, path: &Path) -> (Files, Scopes) {
     let mut files = SlotMap::<FileId, Box<dyn File>>::with_key();
     let mut scopes = Scopes::new(path);
     let mut current_scope = scopes.root_id();
-    for (action, path) in WalkDir::new(path.join("src"))
+    for (action, path) in WalkDir::new(path)
         .min_depth(1)
         .into_iter()
         .filter_map(|e| e.ok().map(|(a, e)| (a, e.into_path())))

@@ -11,8 +11,8 @@ use crate::parsing::ast::ParsedType;
 
 use crate::parsing::utilities::Spanned;
 use crate::project::{
-    FileId, FunctionId, ModuleId, ResolvedUses, StructId, UseTarget,
-    UseTargetSingle, UseTargetStar, VariableId, Workspace,
+    FileId, FunctionId, ModuleId, ResolvedUses, StructId, UseTarget, UseTargetSingle,
+    UseTargetStar, VariableId, Workspace,
 };
 use crate::source::DeclarationPath;
 
@@ -28,7 +28,7 @@ pub fn resolve_uses(rodeo: &mut Rodeo, workspace: &mut Workspace) {
         let src = project
             .files
             .file_by_id(module.file_id)
-            .expect("The file should exist")
+            .expect("BUG: The file should exist")
             .src();
 
         for u in uses.iter() {
@@ -38,7 +38,7 @@ pub fn resolve_uses(rodeo: &mut Rodeo, workspace: &mut Workspace) {
                     .map(|s| {
                         rodeo.get_or_intern(
                             src.slice(s.into_range())
-                                .expect("The span should be correct"),
+                                .expect("BUG: The span should be correct"),
                         )
                     })
                     .collect_vec(),
@@ -77,13 +77,12 @@ pub fn resolve_uses(rodeo: &mut Rodeo, workspace: &mut Workspace) {
                                 UseTarget::UseTargetStar(UseTargetStar {
                                     scope: scope_id,
                                     end_targets: {
-                                        let children = project
-                                            .scopes
+                                        let children = scopes
                                             .scope_children(scope_id)
                                             .expect("BUG: the scope should exist!");
                                         children
                                             .iter()
-                                            .map(|&id| (project.scopes.scope_name(id).unwrap(), id))
+                                            .map(|&id| (scopes.scope_name(id).unwrap(), id))
                                             .collect_vec()
                                     }
                                     .into_boxed_slice(),
@@ -92,7 +91,7 @@ pub fn resolve_uses(rodeo: &mut Rodeo, workspace: &mut Workspace) {
                                 UseTarget::UseTargetSingle(UseTargetSingle {
                                     alias_name: single_alias,
                                     scope: scope_id,
-                                    name: project.scopes.scope_name(scope_id).unwrap(),
+                                    name: scopes.scope_name(scope_id).unwrap(),
                                 })
                             },
                         );
