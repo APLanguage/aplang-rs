@@ -10,6 +10,7 @@ use crate::{
     resolution::name_resolver::{
         ResolvedFunctionOutline, ResolvedStructOutline, ResolvedVariableOutline,
     },
+    typing::{Type, TypeId},
 };
 use chumsky::span::SimpleSpan;
 use either::Either;
@@ -31,9 +32,37 @@ new_key_type! { pub struct ModuleId; }
 new_key_type! { pub struct DeclarationId; }
 new_key_type! { pub struct DependencyId; }
 
+#[derive(Default)]
+pub struct TypeRegistry {
+    types: SlotMap<TypeId, Type>,
+}
+
+impl TypeRegistry {
+    pub fn new() -> Self {
+        Self {
+            types: SlotMap::with_key(),
+        }
+    }
+
+    fn create_struct(&mut self, dependency_id: DependencyId, struct_id: StructId) -> TypeId {
+        self.types.insert(Type::Data(dependency_id, struct_id))
+    }
+
+    pub fn get_declaration_from_type_id(
+        &self,
+        type_id: TypeId,
+    ) -> Option<(DependencyId, StructId)> {
+        match self.types.get(type_id)? {
+            Type::Data(dep_id, struct_id) => Some((*dep_id, *struct_id)),
+            _ => None,
+        }
+    }
+}
+
 pub struct Workspace {
     pub aplang_file: APLangWorkspaceFile,
     pub dependencies: Dependencies,
+    pub type_registery: TypeRegistry,
     _project: DependencyId,
 }
 
@@ -79,7 +108,7 @@ pub enum DeclarationDelegate {
 
 pub struct DeclarationPool {
     pub functions: SlotMap<FunctionId, DeclarationInfo<Function, ResolvedFunctionOutline>>,
-    pub structs: SlotMap<StructId, DeclarationInfo<Struct, ResolvedStructOutline>>,
+    pub structs: SlotMap<StructId, DeclarationInfo<(Struct, TypeId), ResolvedStructOutline>>,
     pub variables: SlotMap<VariableId, DeclarationInfo<Variable, ResolvedVariableOutline>>,
     pub declarations: SlotMap<DeclarationId, DeclarationDelegate>,
 }
@@ -120,6 +149,13 @@ impl DeclarationPool {
         }
         None
     }
+
+    pub fn type_id_of_declaration(&self, dec_id: DeclarationId) -> Option<TypeId> {
+        match self.declarations.get(dec_id)? {
+            DeclarationDelegate::Struct(id) => Some(self.structs.get(*id)?.decl.ast.1),
+            _ => None,
+        }
+    }
 }
 
 pub trait File {
@@ -140,11 +176,6 @@ impl File for VirtualFile {
 pub struct VirtualFile {
     src: String,
     path: Box<Path>,
-}
-
-enum FileOrFolder {
-    File(FileId),
-    Folder(Spur),
 }
 
 pub struct Files {
@@ -246,6 +277,14 @@ impl Dependencies {
         id
     }
 
+    pub fn add_dependency_with_key<F>(&mut self, f: F) -> DependencyId
+    where F: FnOnce(DependencyId) -> DependencyInfo {
+        let id = self.deps.insert_with_key(f);
+        let name = unsafe { self.deps.get_unchecked(id) }.name;
+        self.by_name.insert(name, id);
+        id
+    }
+
     pub fn get_dependency_by_name(&self, name: &[Spur]) -> Result<DependencyId, usize> {
         if name.len() != 1 {
             todo!("Dependencies#get_dependency_by_name: multi project workspaces")
@@ -336,7 +375,7 @@ impl ResolvedUses {
         &'a self,
         dependencies: &'a Dependencies,
         name: Spur,
-    ) -> impl Iterator<Item = (DependencyId, ScopeId, DeclarationId, StructId)> + '_ {
+    ) -> impl Iterator<Item = (DependencyId, ScopeId, DeclarationId, StructId, TypeId)> + '_ {
         self.find(name).filter_map(|(dep_id, scope_id)| {
             let dep_info = dependencies.get_dependency(dep_id)?;
             let scopes = &dep_info.project.scopes;
@@ -350,7 +389,8 @@ impl ResolvedUses {
             else {
                 return None;
             };
-            Some((dep_id, scope_id, *dec_id, *struct_id))
+            let type_id = dep_info.project.pool.structs.get(*struct_id)?.decl.ast.1;
+            Some((dep_id, scope_id, *dec_id, *struct_id, type_id))
         })
     }
 }

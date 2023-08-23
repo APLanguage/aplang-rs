@@ -6,7 +6,7 @@ use slotmap::SlotMap;
 use super::{
     readers::{read_project_from_files, ReadProjectResult},
     scopes::{Scopes, ScopeType},
-    Files, Project, VirtualFile,
+    Files, Project, VirtualFile, DependencyId, TypeRegistry,
 };
 
 const STD_LIB_SRC: &str = r##"
@@ -23,7 +23,7 @@ struct str
 fn println(input: str) {}
 "##;
 
-pub fn create_std_lib(rodeo: &mut Rodeo) -> Project {
+pub fn create_std_lib(dependency_id: DependencyId, rodeo: &mut Rodeo, types: &mut TypeRegistry) -> Project {
     let mut files = Files {
         files: SlotMap::with_key(),
     };
@@ -34,7 +34,7 @@ pub fn create_std_lib(rodeo: &mut Rodeo) -> Project {
     }));
     scopes.add(scopes.root_id(), ScopeType::File(rodeo.get_or_intern_static("std"), file_id));
 
-    match read_project_from_files(rodeo, files, scopes) {
+    match read_project_from_files(dependency_id, rodeo, files, scopes, types) {
         ReadProjectResult::Err(_, _) => panic!("The std should compile!"),
         ReadProjectResult::Ok(p) => p,
     }

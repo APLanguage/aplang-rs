@@ -14,7 +14,7 @@ use crate::project::{
     FileId, FunctionId, ModuleId, ResolvedUses, StructId, UseTarget, UseTargetSingle,
     UseTargetStar, VariableId, Workspace,
 };
-use crate::source::DeclarationPath;
+use crate::typing::TypeId;
 
 pub fn resolve_uses(rodeo: &mut Rodeo, workspace: &mut Workspace) {
     let project = workspace.project();
@@ -110,18 +110,18 @@ pub fn resolve_uses(rodeo: &mut Rodeo, workspace: &mut Workspace) {
 
 #[derive(Debug)]
 pub struct ResolvedFunctionOutline {
-    parameters: Box<[Result<DeclarationPath, SimpleSpan>]>,
-    ret_ty: Option<Result<DeclarationPath, SimpleSpan>>,
+    parameters: Box<[Result<TypeId, SimpleSpan>]>,
+    ret_ty: Option<Result<TypeId, SimpleSpan>>,
 }
 
 #[derive(Debug)]
 pub struct ResolvedVariableOutline {
-    ty: Option<Result<DeclarationPath, SimpleSpan>>,
+    ty: Option<Result<TypeId, SimpleSpan>>,
 }
 
 #[derive(Debug)]
 pub struct ResolvedStructOutline {
-    fields: Box<[Result<DeclarationPath, SimpleSpan>]>,
+    fields: Box<[Result<TypeId, SimpleSpan>]>,
 }
 
 pub fn resolve_workspace_outlines(workspace: &mut Workspace) -> HashMap<FileId, Vec<SimpleSpan>> {
@@ -151,7 +151,7 @@ pub fn resolve_function_outline(workspace: &mut Workspace) -> HashMap<FileId, Ve
             Right(resolved) => resolved,
         };
         let Function { parameters, ty, .. } = &func.decl.ast;
-        let parameters: Box<[Result<DeclarationPath, SimpleSpan>]> = resolve_multiple(
+        let parameters: Box<[Result<TypeId, SimpleSpan>]> = resolve_multiple(
             parameters.iter().map(|param| &param.ty),
             resolved,
             workspace_read,
@@ -232,7 +232,7 @@ pub fn resolve_struct_outline(workspace: &mut Workspace) -> HashMap<FileId, Vec<
             Left(_) => panic!("Should've been resolved"),
             Right(resolved) => resolved,
         };
-        let Struct { fields, .. } = &strct.decl.ast;
+        let (Struct { fields, .. }, _) = &strct.decl.ast;
         let fields = resolve_multiple(
             fields.iter().map(|field| &field.ty),
             resolved,
@@ -262,41 +262,40 @@ fn resolve_singular(
     resolved: &ResolvedUses,
     workspace_read: &Workspace,
     file_id: FileId,
-) -> Option<Result<DeclarationPath, SimpleSpan>> {
+) -> Option<Result<TypeId, SimpleSpan>> {
     let dependency_id = workspace_read.project_dep_id();
     let scopes = &workspace_read.project().scopes;
     let scope = scopes.scope_of_file(file_id).unwrap();
-    match ty {
-        Some(Spanned(t, s)) => {
-            let name_for_search = match t {
-                ParsedType::Data(Spanned(name_for_search, _)) => *name_for_search,
-                ParsedType::Array(_) => todo!("array type resolution"),
-            };
-            Some(
-                scopes
-                    .scope_children_by_name(scope, name_for_search)
-                    .into_iter()
-                    .flatten()
-                    .filter_map(|scope_id| {
-                        scopes
-                            .scope_as_declaration(scope_id)
-                            .map(|(_name, dec_id)| (dependency_id, dec_id))
-                    })
-                    .chain(
-                        resolved
-                            .find_struct(&workspace_read.dependencies, name_for_search)
-                            .map(|(dep_id, _, dec_id, _)| (dep_id, dec_id)),
-                    )
-                    .next()
-                    .map(|(dep_id, dec_id)| DeclarationPath {
-                        module_id: dep_id,
-                        declaration_id: dec_id,
-                    })
-                    .ok_or(*s),
-            )
-        }
-        None => None,
-    }
+    let Some(Spanned(t, s)) = ty else {
+        return None;
+    };
+    let name_for_search = *match t {
+        ParsedType::Data(Spanned(name_for_search, _)) => name_for_search,
+        ParsedType::Array(_) => todo!("array type resolution"),
+    };
+    Some(scopes
+        .scope_children_by_name(scope, name_for_search)
+        .into_iter()
+        .flatten()
+        .filter_map(|scope_id| {
+            scopes
+                .scope_as_declaration(scope_id)
+                .and_then(|(_name, dec_id)| {
+                    workspace_read
+                        .dependencies
+                        .get_dependency(dependency_id)?
+                        .project
+                        .pool
+                        .type_id_of_declaration(dec_id)
+                })
+        })
+        .chain(
+            resolved
+                .find_struct(&workspace_read.dependencies, name_for_search)
+                .map(|(.., type_id)| type_id),
+        )
+        .next()
+        .ok_or(*s))
 }
 
 fn resolve_multiple<'a, I: Iterator<Item = &'a Spanned<ParsedType>>>(
@@ -304,37 +303,35 @@ fn resolve_multiple<'a, I: Iterator<Item = &'a Spanned<ParsedType>>>(
     resolved: &ResolvedUses,
     workspace_read: &Workspace,
     file_id: FileId,
-) -> Box<[Result<DeclarationPath, SimpleSpan>]> {
+) -> Box<[Result<TypeId, SimpleSpan>]> {
     let dependency_id = workspace_read.project_dep_id();
     let scopes = &workspace_read.project().scopes;
     let scope = scopes.scope_of_file(file_id).unwrap();
     fields
         .map(|Spanned(ty, span)| match ty {
-            ParsedType::Data(name_to_find) => {
-                if let Some((dep_id, dec_id)) = scopes
-                    .scope_children_by_name(scope, name_to_find.0)
-                    .into_iter()
-                    .flatten()
-                    .filter_map(|scope_id| {
-                        scopes
-                            .scope_as_declaration(scope_id)
-                            .map(|(_name, dec_id)| (dependency_id, dec_id))
-                    })
-                    .chain(
-                        resolved
-                            .find_struct(&workspace_read.dependencies, name_to_find.0)
-                            .map(|(dep_id, _, dec_id, _)| (dep_id, dec_id)),
-                    )
-                    .next()
-                {
-                    Ok(DeclarationPath {
-                        module_id: dep_id,
-                        declaration_id: dec_id,
-                    })
-                } else {
-                    Err(*span)
-                }
-            }
+            ParsedType::Data(name_to_find) => scopes
+                .scope_children_by_name(scope, name_to_find.0)
+                .into_iter()
+                .flatten()
+                .filter_map(|scope_id| {
+                    scopes
+                        .scope_as_declaration(scope_id)
+                        .and_then(|(_name, dec_id)| {
+                            workspace_read
+                                .dependencies
+                                .get_dependency(dependency_id)?
+                                .project
+                                .pool
+                                .type_id_of_declaration(dec_id)
+                        })
+                })
+                .chain(
+                    resolved
+                        .find_struct(&workspace_read.dependencies, name_to_find.0)
+                        .map(|(.., type_id)| type_id),
+                )
+                .next()
+                .ok_or(*span),
             ParsedType::Array(_) => todo!("array type resolution"),
         })
         .collect_vec()

@@ -24,10 +24,3 @@ pub struct Variable {
     pub name: String,
     pub ty: TypeId,
 }
-
-#[derive(Debug)]
-pub enum Declaration {
-    Variable(Variable),
-    Function(Function),
-    Struct(Struct),
-}

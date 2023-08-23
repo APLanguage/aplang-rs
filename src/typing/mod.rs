@@ -2,9 +2,11 @@ pub mod typedast;
 
 use std::num::NonZeroUsize;
 
-use crate::source::DeclarationPath;
+use slotmap::new_key_type;
 
-pub type TypeId = usize;
+use crate::{source::DeclarationPath, project::{DependencyId, StructId}};
+
+new_key_type! { pub struct TypeId; }
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum OperationResult {
@@ -17,7 +19,7 @@ pub enum OperationResult {
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Type {
-    Data(DeclarationPath),
+    Data(DependencyId, StructId),
     Array {
         ty: TypeId,
         size: Option<NonZeroUsize>,
