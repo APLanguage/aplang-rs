@@ -3,7 +3,7 @@ pub mod readers;
 pub mod scopes;
 pub mod std_lib;
 
-use std::{collections::HashMap, hash::Hash, path::Path, slice::Iter};
+use std::{collections::HashMap, path::Path, slice::Iter};
 
 use crate::{
     parsing::{ast::declarations::Variable, utilities::Spanned},
@@ -59,6 +59,108 @@ impl TypeRegistry {
     }
 }
 
+pub struct NameResolver<'a> {
+    pub dependencies: &'a Dependencies,
+    pub type_registery: &'a TypeRegistry,
+    pub dependency_id: DependencyId,
+    pub scope_id: ScopeId,
+    pub file_id: FileId,
+    pub resolved_uses: &'a ResolvedUses,
+}
+impl<'a> NameResolver<'a> {
+    fn new_with_scope(
+        deps: &'a Dependencies,
+        types: &'a TypeRegistry,
+        dependency_id: DependencyId,
+        scope_id: ScopeId,
+    ) -> NameResolver<'a> {
+        let file_id = deps
+            .get_dependency_scopes(dependency_id)
+            .unwrap()
+            .scope_as_file(scope_id)
+            .unwrap();
+        let resolved_uses = deps
+            .get_dependency(dependency_id)
+            .unwrap()
+            .project
+            .src
+            .get_module_by_file(file_id)
+            .unwrap()
+            .1
+            .imports
+            .as_ref()
+            .expect_right("should have been resolved");
+        Self {
+            dependencies: deps,
+            type_registery: types,
+            dependency_id,
+            scope_id,
+            file_id,
+            resolved_uses,
+        }
+    }
+
+    fn new_with_file(
+        deps: &'a Dependencies,
+        types: &'a TypeRegistry,
+        dependency_id: DependencyId,
+        file_id: FileId,
+    ) -> NameResolver<'a> {
+        let scope_id = deps
+            .get_dependency_scopes(dependency_id)
+            .unwrap()
+            .scope_of_file(file_id)
+            .unwrap();
+        let resolved_uses = deps
+            .get_dependency(dependency_id)
+            .unwrap()
+            .project
+            .src
+            .get_module_by_file(file_id)
+            .unwrap()
+            .1
+            .imports
+            .as_ref()
+            .expect_right("should have been resolved");
+        Self {
+            dependencies: deps,
+            type_registery: types,
+            dependency_id,
+            scope_id,
+            file_id,
+            resolved_uses,
+        }
+    }
+
+    pub fn resolve_type(&self, name_for_search: Spur) -> Option<TypeId> {
+        let dependency_id = self.dependency_id;
+        let scopes = self.dependencies.get_dependency_scopes(dependency_id)?;
+        let scope = self.scope_id;
+
+        scopes
+            .scope_children_by_name(scope, name_for_search)
+            .into_iter()
+            .flatten()
+            .filter_map(|scope_id| {
+                scopes
+                    .scope_as_declaration(scope_id)
+                    .and_then(|(_name, dec_id)| {
+                        self.dependencies
+                            .get_dependency(dependency_id)?
+                            .project
+                            .pool
+                            .type_id_of_declaration(dec_id)
+                    })
+            })
+            .chain(
+                self.resolved_uses
+                    .find_struct(self.dependencies, name_for_search)
+                    .map(|(.., type_id)| type_id),
+            )
+            .next()
+    }
+}
+
 pub struct Workspace {
     pub aplang_file: APLangWorkspaceFile,
     pub dependencies: Dependencies,
@@ -85,6 +187,32 @@ impl Workspace {
 
     pub fn project_dep_id(&self) -> DependencyId {
         self._project
+    }
+
+    pub fn resolver_by_scope(
+        &self,
+        dependency_id: DependencyId,
+        scope_id: ScopeId,
+    ) -> NameResolver<'_> {
+        NameResolver::new_with_scope(
+            &self.dependencies,
+            &self.type_registery,
+            dependency_id,
+            scope_id,
+        )
+    }
+
+    pub fn resolver_by_file(
+        &self,
+        dependency_id: DependencyId,
+        file_id: FileId,
+    ) -> NameResolver<'_> {
+        NameResolver::new_with_file(
+            &self.dependencies,
+            &self.type_registery,
+            dependency_id,
+            file_id,
+        )
     }
 }
 
@@ -196,8 +324,8 @@ pub struct Project {
 }
 
 pub struct AstFiles {
-    pub files: SlotMap<ModuleId, ModuleData>,
-    pub by_file: HashMap<FileId, ModuleId>,
+    files: SlotMap<ModuleId, ModuleData>,
+    by_file: HashMap<FileId, ModuleId>,
 }
 
 impl AstFiles {
@@ -212,12 +340,32 @@ impl AstFiles {
         }
     }
 
-    pub fn get_module_by_file(&self, file_id: FileId) -> Option<&ModuleData> {
-        self.files.get(*self.by_file.get(&file_id)?)
+    pub fn get_module_by_file(&self, file_id: FileId) -> Option<(ModuleId, &ModuleData)> {
+        let module_id = *self.by_file.get(&file_id)?;
+        Some((module_id, self.files.get(module_id)?))
     }
 
-    pub fn get_module_by_file_mut(&mut self, file_id: FileId) -> Option<&mut ModuleData> {
-        self.files.get_mut(*self.by_file.get(&file_id)?)
+    pub fn get_module_by_file_mut(
+        &mut self,
+        file_id: FileId,
+    ) -> Option<(ModuleId, &mut ModuleData)> {
+        let module_id = *self.by_file.get(&file_id)?;
+        Some((module_id, self.files.get_mut(module_id)?))
+    }
+
+    pub fn get_module_by_module(&self, module_id: ModuleId) -> Option<(ModuleId, &ModuleData)> {
+        Some((module_id, self.files.get(module_id)?))
+    }
+
+    pub fn get_module_by_module_mut(
+        &mut self,
+        module_id: ModuleId,
+    ) -> Option<(ModuleId, &mut ModuleData)> {
+        Some((module_id, self.files.get_mut(module_id)?))
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = (ModuleId, &ModuleData)> {
+        return self.files.iter();
     }
 }
 #[derive(Debug)]
@@ -295,7 +443,7 @@ impl Dependencies {
             .ok_or(0)
     }
 
-    pub fn get_dependency_scope(&self, dependency_id: DependencyId) -> Option<&Scopes> {
+    pub fn get_dependency_scopes(&self, dependency_id: DependencyId) -> Option<&Scopes> {
         self.deps.get(dependency_id).map(|d| &d.project.scopes)
     }
 }

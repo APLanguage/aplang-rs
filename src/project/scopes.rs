@@ -52,6 +52,13 @@ impl Scopes {
         }
     }
 
+    pub fn scope_as_file(&self, id: ScopeId) -> Option<FileId> {
+        match self.tree.get(id.node).map(Node::get) {
+            Some(ScopeType::File(_, id)) => Some(*id),
+            _ => None,
+        }
+    }
+
     pub fn scope_child_by_name(&self, id: ScopeId, name: Spur) -> Option<ScopeId> {
         let mut node_opt = self.tree.get(id.node)?.first_child();
         while let Some(node_id) = node_opt {

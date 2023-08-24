@@ -78,7 +78,7 @@ fn main() {
         resolve_uses(&mut rodeo, &mut workspace);
         println!("Accumulating errors...");
         let mut is_errors = false;
-        for (_m_id, m) in workspace.project().src.files.iter() {
+        for (_m_id, m) in workspace.project().src.iter() {
             let file = workspace.project().files.file_by_id(m.file_id).unwrap();
             for err in match &m.imports {
                 Left(_) => panic!("should've resolved everything"),

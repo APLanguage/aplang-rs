@@ -23,8 +23,8 @@ use super::{
     std_lib::create_std_lib,
     AstFiles, DeclarationDelegate, DeclarationId, DeclarationInfo, DeclarationPool,
     DeclarationResolutionStage, Dependencies, DependencyId, DependencyInfo, File, FileId, Files,
-    FunctionId, ModuleData, ModuleId, Project, StructId, TypeRegistry, VariableId, VirtualFile,
-    Workspace,
+    FunctionId, ModuleData, ModuleId, Project, StructId, TypeRegistry, VariableId,
+    VirtualFile, Workspace,
 };
 
 #[derive(Debug, Error)]
