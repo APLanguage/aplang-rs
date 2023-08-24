@@ -12,7 +12,7 @@ use crate::{
         readers::{read_workspace, ReadWorkspaceError, ReadWorkspaceResult},
         Workspace,
     },
-    resolution::name_resolver::{resolve_uses, resolve_workspace_outlines},
+    resolution::name_resolution::{resolve_uses, resolve_workspace_outlines},
 };
 use chumsky::{error::RichReason, prelude::Rich, primitive::end, ParseResult, Parser};
 use either::Either::{Left, Right};

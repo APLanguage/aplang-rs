@@ -11,10 +11,12 @@ use crate::parsing::ast::ParsedType;
 
 use crate::parsing::utilities::Spanned;
 use crate::project::{
-    FileId, FunctionId, ModuleId, NameResolver, ResolvedUses, StructId, UseTarget, UseTargetSingle,
+    FileId, FunctionId, ModuleId, ResolvedUses, StructId, UseTarget, UseTargetSingle,
     UseTargetStar, VariableId, Workspace,
 };
 use crate::typing::TypeId;
+
+use super::FileScopedNameResolver;
 
 pub fn resolve_uses(rodeo: &mut Rodeo, workspace: &mut Workspace) {
     let project = workspace.project();
@@ -232,7 +234,7 @@ pub fn resolve_struct_outline(workspace: &mut Workspace) -> HashMap<FileId, Vec<
 
 fn resolve_singular(
     ty: &Spanned<ParsedType>,
-    name_resolver: &NameResolver,
+    name_resolver: &FileScopedNameResolver,
 ) -> Result<TypeId, SimpleSpan> {
     let Spanned(t, s) = ty;
     let name_for_search = *match t {
@@ -244,7 +246,7 @@ fn resolve_singular(
 
 fn resolve_multiple<'a, I: Iterator<Item = &'a Spanned<ParsedType>>>(
     fields: I,
-    name_resolver: &NameResolver,
+    name_resolver: &FileScopedNameResolver,
 ) -> Box<[Result<TypeId, SimpleSpan>]> {
     fields
         .map(|Spanned(ty, span)| match ty {
