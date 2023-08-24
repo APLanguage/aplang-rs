@@ -1,6 +1,6 @@
 use crate::parsing::{
     ast::expressions::Expression,
-    utilities::Spanned,
+    Spanned,
 };
 
 use super::declarations::Declaration;

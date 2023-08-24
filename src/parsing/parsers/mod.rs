@@ -9,7 +9,7 @@ use crate::source::SourceFile;
 
 use super::{
     tokenizer::{newline, Token},
-    utilities::Spanned,
+    Spanned,
     Infoable, Infoed,
 };
 

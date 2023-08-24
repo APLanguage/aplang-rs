@@ -4,7 +4,7 @@ use crate::{
     parsing::{
         parsers::number::NumberLiteralResult,
         tokenizer::Operation,
-        utilities::Spanned,
+        Spanned,
         Infoable, Infoed,
     },
     source::DeclarationPath, typing::TypeId,

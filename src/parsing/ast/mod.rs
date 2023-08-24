@@ -1,6 +1,6 @@
 use lasso::Spur;
 
-use super::{utilities::Spanned, Infoable};
+use super::{Spanned, Infoable};
 
 pub mod expressions;
 pub mod statements;

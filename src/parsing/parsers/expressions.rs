@@ -12,7 +12,7 @@ use crate::parsing::{
     parsers::{CollectBoxedSliceExt, ParserState, TokenInput, TokenParser},
     tokenizer::Identifier,
     tokenizer::{ident, keyword, Operation, Token},
-    utilities::Spanned,
+    Spanned,
 };
 
 macro_rules! ops_parser {

@@ -6,15 +6,20 @@ use itertools::Itertools;
 use lasso::Rodeo;
 use logos::Source;
 
-use crate::parsing::ast::declarations::{FlatUseDeclaration, Function, Struct, Variable};
-use crate::parsing::ast::ParsedType;
-
-use crate::parsing::utilities::Spanned;
-use crate::project::{
-    DependencyId, FileId, FunctionId, ModuleId, ResolvedUses, StructId, UseTarget, UseTargetSingle,
-    UseTargetStar, VariableId, Workspace,
+use crate::{
+    parsing::{
+        ast::{
+            declarations::{FlatUseDeclaration, Function, Struct, Variable},
+            ParsedType,
+        },
+        Spanned,
+    },
+    project::{
+        DependencyId, FileId, FunctionId, ModuleId, ResolvedUses, StructId, UseTarget,
+        UseTargetSingle, UseTargetStar, VariableId, Workspace,
+    },
+    typing::TypeId,
 };
-use crate::typing::TypeId;
 
 use super::FileScopedNameResolver;
 
@@ -122,7 +127,11 @@ pub fn resolve_uses(
         }
         resolutions.insert(module_id, resolved);
     }
-    let project = &mut workspace.dependencies.get_dependency_mut(dependency_id).unwrap().project;
+    let project = &mut workspace
+        .dependencies
+        .get_dependency_mut(dependency_id)
+        .unwrap()
+        .project;
     for (module_id, resolved_uses) in resolutions.into_iter() {
         project
             .src
@@ -263,14 +272,17 @@ pub fn resolve_struct_outline(
     workspace: &mut Workspace,
     dependency_id: DependencyId,
 ) -> HashMap<FileId, Vec<SimpleSpan>> {
-    let project = &workspace.dependencies.get_dependency(dependency_id).unwrap().project;
+    let project = &workspace
+        .dependencies
+        .get_dependency(dependency_id)
+        .unwrap()
+        .project;
     let workspace_read: &Workspace = workspace;
     let mut errors = HashMap::<FileId, Vec<SimpleSpan>>::new();
     let mut to_update = HashMap::<StructId, ResolvedStructOutline>::new();
 
     for (struct_id, strct) in project.pool.structs.iter() {
-        let name_resolver =
-            workspace_read.resolver_by_file(dependency_id, strct.file_id);
+        let name_resolver = workspace_read.resolver_by_file(dependency_id, strct.file_id);
         let (Struct { fields, .. }, _) = &strct.decl.ast;
         let fields = resolve_multiple(fields.iter().map(|field| &field.ty), &name_resolver);
         for e in fields.iter().filter_map(|r| r.err()) {

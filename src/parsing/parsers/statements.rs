@@ -7,7 +7,7 @@ use crate::parsing::{
     },
     parsers::{expressions::expression_parser, CollectBoxedSliceExt, TokenInput, TokenParser},
     tokenizer::{keyword, Identifier, Token},
-    utilities::Spanned,
+    Spanned,
 };
 
 use super::{declarations::variable_parser, TokenParserExt};

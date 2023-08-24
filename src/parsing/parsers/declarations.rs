@@ -5,7 +5,7 @@ use crate::parsing::{
     },
     parsers::{expressions::expression_parser, TokenInput, TokenParser},
     tokenizer::{ident, keyword, Identifier, Token},
-    utilities::Spanned,
+    Spanned,
 };
 use chumsky::{
     primitive::{choice, group, just},

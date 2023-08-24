@@ -6,7 +6,7 @@ pub mod std_lib;
 use std::{collections::HashMap, path::Path, slice::Iter};
 
 use crate::{
-    parsing::{ast::declarations::Variable, utilities::Spanned},
+    parsing::{ast::declarations::Variable, Spanned},
     resolution::{
         name_resolution::{
             ResolvedFunctionOutline, ResolvedStructOutline, ResolvedVariableOutline,

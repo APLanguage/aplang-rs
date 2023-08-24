@@ -2,7 +2,7 @@ use std::iter::empty;
 
 use crate::parsing::{
     ast::{expressions::Expression, statements::Statement},
-    utilities::Spanned,
+    Spanned,
     Infoed,
 };
 
