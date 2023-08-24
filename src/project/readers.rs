@@ -56,7 +56,7 @@ pub fn read_workspace(rodeo: &mut Rodeo, path: &Path) -> ReadWorkspaceResult {
         Err(e) => return ReadWorkspaceResult::ErrFile(e),
     };
     let project_name = rodeo.get_or_intern(&aplang_file.project.name);
-    let mut types = TypeRegistry::new();
+    let mut types = TypeRegistry::new_by_spur_supplier(|s| rodeo.get_or_intern_static(s));
     let mut deps = Dependencies {
         deps: SlotMap::with_key(),
         by_name: HashMap::new(),

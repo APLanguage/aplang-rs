@@ -10,16 +10,6 @@ use super::{
 };
 
 const STD_LIB_SRC: &str = r##"
-struct u8
-struct u16
-struct u32
-struct u64
-struct i8
-struct i16
-struct i32
-struct i64
-struct str
-
 fn println(input: str) {}
 "##;
 

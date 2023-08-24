@@ -7,10 +7,13 @@ use std::{collections::HashMap, path::Path, slice::Iter};
 
 use crate::{
     parsing::{ast::declarations::Variable, utilities::Spanned},
-    resolution::{name_resolution::{
-        ResolvedFunctionOutline, ResolvedStructOutline, ResolvedVariableOutline,
-    }, FileScopedNameResolver},
-    typing::{Type, TypeId},
+    resolution::{
+        name_resolution::{
+            ResolvedFunctionOutline, ResolvedStructOutline, ResolvedVariableOutline,
+        },
+        FileScopedNameResolver,
+    },
+    typing::{IntegerWidth, PrimitiveType, Type, TypeId},
 };
 use chumsky::span::SimpleSpan;
 use either::Either;
@@ -35,12 +38,37 @@ new_key_type! { pub struct DependencyId; }
 #[derive(Default)]
 pub struct TypeRegistry {
     types: SlotMap<TypeId, Type>,
+    primitives_by_spur: HashMap<Spur, (TypeId, PrimitiveType)>,
+    primitives_by_name: HashMap<&'static str, (TypeId, PrimitiveType)>,
 }
 
 impl TypeRegistry {
-    pub fn new() -> Self {
+    pub fn new_by_spur_supplier<F: FnMut(&'static str) -> Spur>(mut supplier: F) -> Self {
+        let mut types = SlotMap::with_key();
+        let mut primitives_by_spur = HashMap::new();
+        let mut primitives_by_name = HashMap::new();
+        macro_rules! insert_into {
+            ($s:literal, $v:expr) => {
+                let ty = types.insert(Type::PrimitiveType($v));
+                primitives_by_name.insert($s, (ty, $v));
+                primitives_by_spur.insert(supplier($s), (ty, $v));
+            };
+        }
+
+        insert_into!("str", PrimitiveType::String);
+        insert_into!("i8", PrimitiveType::Integer(true, IntegerWidth::_8));
+        insert_into!("i16", PrimitiveType::Integer(true, IntegerWidth::_16));
+        insert_into!("i32", PrimitiveType::Integer(true, IntegerWidth::_32));
+        insert_into!("i64", PrimitiveType::Integer(true, IntegerWidth::_64));
+        insert_into!("u8", PrimitiveType::Integer(false, IntegerWidth::_8));
+        insert_into!("u16", PrimitiveType::Integer(false, IntegerWidth::_16));
+        insert_into!("u32", PrimitiveType::Integer(false, IntegerWidth::_32));
+        insert_into!("u64", PrimitiveType::Integer(false, IntegerWidth::_64));
+
         Self {
-            types: SlotMap::with_key(),
+            types,
+            primitives_by_spur,
+            primitives_by_name,
         }
     }
 
@@ -56,6 +84,10 @@ impl TypeRegistry {
             Type::Data(dep_id, struct_id) => Some((*dep_id, *struct_id)),
             _ => None,
         }
+    }
+
+    pub fn primitive_by_spur(&self, name_for_search: Spur) -> Option<(TypeId, PrimitiveType)> {
+        self.primitives_by_spur.get(&name_for_search).cloned()
     }
 }
 
@@ -398,6 +430,10 @@ impl ResolvedUses {
     }
 
     pub fn find(&self, name: Spur) -> impl Iterator<Item = (DependencyId, ScopeId)> + '_ {
+        self.find_in_single(name).chain(self.find_in_stars(name))
+    }
+
+    pub fn find_in_single(&self, name: Spur) -> impl Iterator<Item = (DependencyId, ScopeId)> + '_ {
         self.uses
             .iter()
             .flat_map(move |(dep_id, ResolvedUsesInDependency(_, singles))| {
@@ -406,15 +442,18 @@ impl ResolvedUses {
                     .filter(move |t| t.alias_name.map(|n| n.0 == name).unwrap_or(t.name == name))
                     .map(|t| (*dep_id, t.scope))
             })
-            .chain(self.uses.iter().flat_map(
-                move |(dep_id, ResolvedUsesInDependency(stars, _))| {
-                    stars
-                        .iter()
-                        .flat_map(|t| t.end_targets.iter())
-                        .filter_map(move |(target_name, id)| (*target_name == name).then_some(id))
-                        .map(|&id| (*dep_id, id))
-                },
-            ))
+    }
+
+    pub fn find_in_stars(&self, name: Spur) -> impl Iterator<Item = (DependencyId, ScopeId)> + '_ {
+        self.uses
+            .iter()
+            .flat_map(move |(dep_id, ResolvedUsesInDependency(stars, _))| {
+                stars
+                    .iter()
+                    .flat_map(|t| t.end_targets.iter())
+                    .filter_map(move |(target_name, id)| (*target_name == name).then_some(id))
+                    .map(|&id| (*dep_id, id))
+            })
     }
 
     pub fn find_struct<'a>(
@@ -422,22 +461,47 @@ impl ResolvedUses {
         dependencies: &'a Dependencies,
         name: Spur,
     ) -> impl Iterator<Item = (DependencyId, ScopeId, DeclarationId, StructId, TypeId)> + '_ {
-        self.find(name).filter_map(|(dep_id, scope_id)| {
-            let dep_info = dependencies.get_dependency(dep_id)?;
-            let scopes = &dep_info.project.scopes;
+        self.find(name)
+            .filter_map(|(dep_id, scope_id)| self.filter_finding(dependencies, dep_id, scope_id))
+    }
 
-            let ScopeType::Declaration(_, dec_id) = scopes.scope(scope_id)? else {
-                return None;
-            };
+    pub fn find_struct_in_single<'a>(
+        &'a self,
+        dependencies: &'a Dependencies,
+        name: Spur,
+    ) -> impl Iterator<Item = (DependencyId, ScopeId, DeclarationId, StructId, TypeId)> + '_ {
+        self.find_in_single(name)
+            .filter_map(|(dep_id, scope_id)| self.filter_finding(dependencies, dep_id, scope_id))
+    }
 
-            let DeclarationDelegate::Struct(struct_id) =
-                dep_info.project.pool.declarations.get(*dec_id)?
-            else {
-                return None;
-            };
-            let type_id = dep_info.project.pool.structs.get(*struct_id)?.decl.ast.1;
-            Some((dep_id, scope_id, *dec_id, *struct_id, type_id))
-        })
+    pub fn find_struct_in_stars<'a>(
+        &'a self,
+        dependencies: &'a Dependencies,
+        name: Spur,
+    ) -> impl Iterator<Item = (DependencyId, ScopeId, DeclarationId, StructId, TypeId)> + '_ {
+        self.find_in_stars(name)
+            .filter_map(|(dep_id, scope_id)| self.filter_finding(dependencies, dep_id, scope_id))
+    }
+    fn filter_finding(
+        &self,
+        dependencies: &Dependencies,
+        dep_id: DependencyId,
+        scope_id: ScopeId,
+    ) -> Option<(DependencyId, ScopeId, DeclarationId, StructId, TypeId)> {
+        let dep_info = dependencies.get_dependency(dep_id)?;
+        let scopes = &dep_info.project.scopes;
+
+        let ScopeType::Declaration(_, dec_id) = scopes.scope(scope_id)? else {
+            return None;
+        };
+
+        let DeclarationDelegate::Struct(struct_id) =
+            dep_info.project.pool.declarations.get(*dec_id)?
+        else {
+            return None;
+        };
+        let type_id = dep_info.project.pool.structs.get(*struct_id)?.decl.ast.1;
+        Some((dep_id, scope_id, *dec_id, *struct_id, type_id))
     }
 }
 

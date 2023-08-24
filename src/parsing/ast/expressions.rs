@@ -7,8 +7,7 @@ use crate::{
         utilities::Spanned,
         Infoable, Infoed,
     },
-    source::DeclarationPath,
-    typing::TypeId,
+    source::DeclarationPath, typing::TypeId,
 };
 
 #[derive(Debug, PartialEq)]

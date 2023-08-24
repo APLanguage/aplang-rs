@@ -1,13 +1,10 @@
 use lasso::Spur;
 
 use crate::project::scopes::ScopeId;
-use crate::project::{
-    FileId, ResolvedUses, Dependencies, TypeRegistry, DependencyId,
-};
+use crate::project::{Dependencies, DependencyId, FileId, ResolvedUses, TypeRegistry};
 use crate::typing::TypeId;
 
 pub mod name_resolution;
-
 
 pub struct FileScopedNameResolver<'a> {
     pub dependencies: &'a Dependencies,
@@ -104,9 +101,21 @@ impl<'a> FileScopedNameResolver<'a> {
             })
             .chain(
                 self.resolved_uses
-                    .find_struct(self.dependencies, name_for_search)
-                    .map(|(.., type_id)| type_id),
+                    .find_struct_in_single(self.dependencies, name_for_search)
+                    .map(|(.., type_id)| type_id)
+                    .chain(self.find_in_primitives(name_for_search))
+                    .chain(
+                        self.resolved_uses
+                            .find_struct_in_stars(self.dependencies, name_for_search)
+                            .map(|(.., type_id)| type_id),
+                    ),
             )
             .next()
+    }
+
+    fn find_in_primitives(&self, name_for_search: Spur) -> Option<TypeId> {
+        self.type_registery
+            .primitive_by_spur(name_for_search)
+            .map(|(id, _)| id)
     }
 }
