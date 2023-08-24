@@ -1,4 +1,4 @@
-use(std) std::*
+use(std) std::println
 
 struct Person {
     val name: str,

@@ -11,15 +11,25 @@ use crate::parsing::ast::ParsedType;
 
 use crate::parsing::utilities::Spanned;
 use crate::project::{
-    DependencyId, FileId, FunctionId, ModuleId, ResolvedUses, StructId, UseTarget,
-    UseTargetSingle, UseTargetStar, VariableId, Workspace,
+    DependencyId, FileId, FunctionId, ModuleId, ResolvedUses, StructId, UseTarget, UseTargetSingle,
+    UseTargetStar, VariableId, Workspace,
 };
 use crate::typing::TypeId;
 
 use super::FileScopedNameResolver;
 
-pub fn resolve_uses(rodeo: &mut Rodeo, workspace: &mut Workspace) {
-    let project = workspace.project();
+pub fn resolve_uses(
+    rodeo: &mut Rodeo,
+    workspace: &mut Workspace,
+    dependency_id: DependencyId,
+) -> HashMap<FileId, Vec<SimpleSpan>> {
+    let mut errors = HashMap::<FileId, Vec<SimpleSpan>>::new();
+
+    let project = &workspace
+        .dependencies
+        .get_dependency(dependency_id)
+        .unwrap()
+        .project;
     let mut resolutions = HashMap::<ModuleId, ResolvedUses>::new();
 
     for (module_id, module) in project.src.iter() {
@@ -98,13 +108,21 @@ pub fn resolve_uses(rodeo: &mut Rodeo, workspace: &mut Workspace) {
                             },
                         );
                     }
-                    Err(i) => resolved.add_error(flat_spans[i]),
+                    Err(i) => {
+                        resolved.add_error(flat_spans[i]);
+                        match errors.get_mut(&module.file_id) {
+                            Some(v) => v.push(flat_spans[i]),
+                            None => {
+                                errors.insert(module.file_id, vec![flat_spans[i]]);
+                            }
+                        }
+                    }
                 }
             }
         }
         resolutions.insert(module_id, resolved);
     }
-    let project = workspace.project_mut();
+    let project = &mut workspace.dependencies.get_dependency_mut(dependency_id).unwrap().project;
     for (module_id, resolved_uses) in resolutions.into_iter() {
         project
             .src
@@ -113,6 +131,7 @@ pub fn resolve_uses(rodeo: &mut Rodeo, workspace: &mut Workspace) {
             .1
             .imports = Right(resolved_uses);
     }
+    errors
 }
 
 #[derive(Debug)]
@@ -131,10 +150,18 @@ pub struct ResolvedStructOutline {
     fields: Box<[Result<TypeId, SimpleSpan>]>,
 }
 
-pub fn resolve_workspace_outlines(workspace: &mut Workspace) -> HashMap<FileId, Vec<SimpleSpan>> {
-    let func_errs = resolve_function_outline(workspace, workspace.project_dep_id());
-    let var_errs = resolve_variable_outline(workspace, workspace.project_dep_id());
-    let struct_errs = resolve_struct_outline(workspace, workspace.project_dep_id());
+pub fn resolve_workspace_outlines(
+    rodeo: &mut Rodeo,
+    workspace: &mut Workspace,
+    dependency_id: DependencyId,
+) -> HashMap<FileId, Vec<SimpleSpan>> {
+    let import_errs = resolve_uses(rodeo, workspace, dependency_id);
+    if !import_errs.is_empty() {
+        return import_errs;
+    }
+    let func_errs = resolve_function_outline(workspace, dependency_id);
+    let var_errs = resolve_variable_outline(workspace, dependency_id);
+    let struct_errs = resolve_struct_outline(workspace, dependency_id);
     let mut errs = HashMap::new();
     for (k, v) in func_errs.into_iter().chain(var_errs).chain(struct_errs) {
         errs.insert(k, v);
@@ -236,14 +263,14 @@ pub fn resolve_struct_outline(
     workspace: &mut Workspace,
     dependency_id: DependencyId,
 ) -> HashMap<FileId, Vec<SimpleSpan>> {
-    let project = workspace.project();
+    let project = &workspace.dependencies.get_dependency(dependency_id).unwrap().project;
     let workspace_read: &Workspace = workspace;
     let mut errors = HashMap::<FileId, Vec<SimpleSpan>>::new();
     let mut to_update = HashMap::<StructId, ResolvedStructOutline>::new();
 
     for (struct_id, strct) in project.pool.structs.iter() {
         let name_resolver =
-            workspace_read.resolver_by_file(workspace_read.project_dep_id(), strct.file_id);
+            workspace_read.resolver_by_file(dependency_id, strct.file_id);
         let (Struct { fields, .. }, _) = &strct.decl.ast;
         let fields = resolve_multiple(fields.iter().map(|field| &field.ty), &name_resolver);
         for e in fields.iter().filter_map(|r| r.err()) {

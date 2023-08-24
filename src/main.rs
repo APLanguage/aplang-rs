@@ -12,10 +12,9 @@ use crate::{
         readers::{read_workspace, ReadWorkspaceError, ReadWorkspaceResult},
         Workspace,
     },
-    resolution::name_resolution::{resolve_uses, resolve_workspace_outlines},
+    resolution::name_resolution::resolve_workspace_outlines,
 };
 use chumsky::{error::RichReason, prelude::Rich, primitive::end, ParseResult, Parser};
-use either::Either::{Left, Right};
 use itertools::Itertools;
 use lasso::Rodeo;
 use parsing::{
@@ -74,41 +73,10 @@ fn main() {
     if let Some(mut workspace) =
         read_workspace_and_report(&mut rodeo, Path::new("./tests/test-projects/001"))
     {
-        println!("Resolving...");
-        resolve_uses(&mut rodeo, &mut workspace);
-        println!("Accumulating errors...");
         let mut is_errors = false;
-        for (_m_id, m) in workspace.project().src.iter() {
-            let file = workspace.project().files.file_by_id(m.file_id).unwrap();
-            for err in match &m.imports {
-                Left(_) => panic!("should've resolved everything"),
-                Right(r) => r,
-            }
-            .iter_err()
-            {
-                is_errors = true;
-                let mut colors = ariadne::ColorGenerator::new();
-                // Generate & choose some colours for each of our elements
-                let input_name = file.path().as_display().to_string();
-                ariadne::Report::build(ariadne::ReportKind::Error, &input_name, err.start)
-                    .with_message("Module not found.")
-                    .with_label(
-                        ariadne::Label::new((&input_name, err.into_iter()))
-                            .with_message("↑ where 🍌?")
-                            .with_color(colors.next()),
-                    )
-                    .finish()
-                    .print((&input_name, ariadne::Source::from(file.src())))
-                    .unwrap();
-            }
-        }
-        if is_errors {
-            println!("Errors found, cannot go further.");
-            return;
-        }
-        println!("Resolving outlines...");
-        is_errors = false;
-        for (file_id, errs) in resolve_workspace_outlines(&mut workspace).iter() {
+        println!("Resolving...");
+        let dependency_id = workspace.project_dep_id();
+        for (file_id, errs) in resolve_workspace_outlines(&mut rodeo, &mut workspace, dependency_id).iter() {
             is_errors = true;
             let file = workspace.project().files.file_by_id(*file_id).unwrap();
             let mut colors = ariadne::ColorGenerator::new();
@@ -116,7 +84,7 @@ fn main() {
             let input_name = file.path().as_display().to_string();
             for err in errs {
                 ariadne::Report::build(ariadne::ReportKind::Error, &input_name, err.start)
-                    .with_message("Struct not found.")
+                    .with_message("Not found somthing.")
                     .with_label(
                         ariadne::Label::new((&input_name, err.into_iter()))
                             .with_message("↑ where 🍌?")

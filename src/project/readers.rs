@@ -13,6 +13,7 @@ use crate::{
         parsers::{file::file_parser, ParserState},
         tokenizer::{tokenize, Token},
     },
+    resolution::name_resolution::resolve_workspace_outlines,
     source::{RefVirtualFile, SourceFile},
     utils::walkdir::{WalkAction, WalkDir},
 };
@@ -23,8 +24,8 @@ use super::{
     std_lib::create_std_lib,
     AstFiles, DeclarationDelegate, DeclarationId, DeclarationInfo, DeclarationPool,
     DeclarationResolutionStage, Dependencies, DependencyId, DependencyInfo, File, FileId, Files,
-    FunctionId, ModuleData, ModuleId, Project, StructId, TypeRegistry, VariableId,
-    VirtualFile, Workspace,
+    FunctionId, ModuleData, ModuleId, Project, StructId, TypeRegistry, VariableId, VirtualFile,
+    Workspace,
 };
 
 #[derive(Debug, Error)]
@@ -78,16 +79,36 @@ pub fn read_workspace(rodeo: &mut Rodeo, path: &Path) -> ReadWorkspaceResult {
         project,
     });
     deps.by_name.insert(project_name, id);
-    deps.add_dependency_with_key(|std_id| DependencyInfo {
+    let std_id = deps.add_dependency_with_key(|std_id| DependencyInfo {
         name: rodeo.get_or_intern_static("std"),
         project: create_std_lib(std_id, rodeo, &mut types),
     });
-    ReadWorkspaceResult::Ok(Workspace {
+    let mut workspace = Workspace {
         aplang_file,
         dependencies: deps,
         _project: id,
         type_registery: types,
-    })
+    };
+    let std_errs = &resolve_workspace_outlines(rodeo, &mut workspace, std_id);
+    if !std_errs.is_empty() {
+        let project = &workspace
+            .dependencies
+            .get_dependency(std_id)
+            .unwrap()
+            .project;
+        for (f_id, errs) in std_errs {
+            eprintln!(
+                "found {} errs in {}:",
+                errs.len(),
+                project.files.file_by_id(*f_id).unwrap().path().display()
+            );
+            for e in errs {
+                eprintln!("  {}", e);
+            }
+        }
+        panic!("There are resolution errors in std!")
+    }
+    ReadWorkspaceResult::Ok(workspace)
 }
 
 pub enum ReadProjectResult {
