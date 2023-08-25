@@ -10,6 +10,7 @@ fn test_person(person: Person) {
 }
 
 fn main() {
+    var a = c + (d = e)
     println(r"Hello World!")
     val person = Person(r"Amejonah", 42)
     test_person(person)

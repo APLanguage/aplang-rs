@@ -1,4 +1,4 @@
-use std::{collections::HashMap, ffi::OsStr, io::Read, path::Path};
+use std::{collections::HashMap, ffi::OsStr, io::Read, path::Path, cell::RefCell, rc::Rc};
 
 use anyhow::Result;
 use chumsky::{prelude::Rich, primitive::end, span::SimpleSpan, Parser};
@@ -87,7 +87,7 @@ pub fn read_workspace(rodeo: &mut Rodeo, path: &Path) -> ReadWorkspaceResult {
         aplang_file,
         dependencies: deps,
         _project: id,
-        type_registery: types,
+        type_registery: Rc::new(RefCell::new(types)),
     };
     let std_errs = &resolve_workspace_outlines(rodeo, &mut workspace, std_id);
     if !std_errs.is_empty() {

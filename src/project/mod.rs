@@ -3,7 +3,7 @@ pub mod readers;
 pub mod scopes;
 pub mod std_lib;
 
-use std::{collections::HashMap, path::Path, slice::Iter};
+use std::{cell::RefCell, collections::HashMap, path::Path, rc::Rc, slice::Iter};
 
 use crate::{
     parsing::{ast::declarations::Variable, Spanned},
@@ -89,12 +89,23 @@ impl TypeRegistry {
     pub fn primitive_by_spur(&self, name_for_search: Spur) -> Option<(TypeId, PrimitiveType)> {
         self.primitives_by_spur.get(&name_for_search).cloned()
     }
+
+    pub fn register_type(&mut self, ty: Type) -> TypeId {
+        self.types.insert(ty)
+    }
+
+    pub fn get_as_unknown(&self, type_id: TypeId) -> Option<(FileId, Spanned<Spur>)> {
+        self.types.get(type_id).and_then(|t| match t {
+            Type::Unknown(f, s) => Some((*f, *s)),
+            _ => None
+        })
+    }
 }
 
 pub struct Workspace {
     pub aplang_file: APLangWorkspaceFile,
     pub dependencies: Dependencies,
-    pub type_registery: TypeRegistry,
+    pub type_registery: Rc<RefCell<TypeRegistry>>,
     _project: DependencyId,
 }
 
@@ -126,7 +137,7 @@ impl Workspace {
     ) -> FileScopedNameResolver<'_> {
         FileScopedNameResolver::new_with_scope(
             &self.dependencies,
-            &self.type_registery,
+            self.type_registery.clone(),
             dependency_id,
             scope_id,
         )
@@ -139,7 +150,7 @@ impl Workspace {
     ) -> FileScopedNameResolver<'_> {
         FileScopedNameResolver::new_with_file(
             &self.dependencies,
-            &self.type_registery,
+            self.type_registery.clone(),
             dependency_id,
             file_id,
         )

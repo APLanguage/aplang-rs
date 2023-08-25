@@ -2,11 +2,12 @@ pub mod typedast;
 
 use std::num::NonZeroUsize;
 
+use lasso::Spur;
 use slotmap::new_key_type;
 
 use crate::{
-    project::{DependencyId, StructId},
-    source::DeclarationPath,
+    project::{DependencyId, StructId, FileId},
+    source::DeclarationPath, parsing::Spanned,
 };
 
 new_key_type! { pub struct TypeId; }
@@ -38,7 +39,7 @@ pub enum Type {
     InternalUnion(Box<[TypeId]>),
     Ref(TypeId),
     OperationResult(OperationResult),
-    Unknown,
+    Unknown(FileId, Spanned<Spur>),
     Unit,
     Nothing,
 }

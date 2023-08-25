@@ -145,18 +145,18 @@ pub fn resolve_uses(
 
 #[derive(Debug)]
 pub struct ResolvedFunctionOutline {
-    parameters: Box<[Result<TypeId, SimpleSpan>]>,
-    ret_ty: Option<Result<TypeId, SimpleSpan>>,
+    parameters: Box<[Result<TypeId, TypeId>]>,
+    ret_ty: Option<Result<TypeId, TypeId>>,
 }
 
 #[derive(Debug)]
 pub struct ResolvedVariableOutline {
-    ty: Option<Result<TypeId, SimpleSpan>>,
+    ty: Option<Result<TypeId, TypeId>>,
 }
 
 #[derive(Debug)]
 pub struct ResolvedStructOutline {
-    fields: Box<[Result<TypeId, SimpleSpan>]>,
+    fields: Box<[Result<TypeId, TypeId>]>,
 }
 
 pub fn resolve_workspace_outlines(
@@ -195,7 +195,7 @@ pub fn resolve_function_outline(
     for (func_id, func) in project.pool.functions.iter() {
         let name_resolver = workspace_read.resolver_by_file(dependency_id, func.file_id);
         let Function { parameters, ty, .. } = &func.decl.ast;
-        let parameters: Box<[Result<TypeId, SimpleSpan>]> =
+        let parameters: Box<[Result<TypeId, TypeId>]> =
             resolve_multiple(parameters.iter().map(|param| &param.ty), &name_resolver);
         let ret_ty = ty.as_ref().map(|ty| resolve_singular(ty, &name_resolver));
         for e in parameters
@@ -203,6 +203,13 @@ pub fn resolve_function_outline(
             .filter_map(|r| r.err())
             .chain(ret_ty.and_then(|r| r.err().to_owned()))
         {
+            let e = name_resolver
+                .type_registery
+                .borrow()
+                .get_as_unknown(e)
+                .unwrap()
+                .1
+                 .1;
             match errors.get_mut(&func.file_id) {
                 Some(v) => v.push(e),
                 None => {
@@ -246,6 +253,13 @@ pub fn resolve_variable_outline(
         let Variable { ty, .. } = &var.decl.ast;
         let ty = ty.as_ref().map(|ty| resolve_singular(ty, &name_resolver));
         if let Some(e) = ty.and_then(|r| r.err().to_owned()) {
+            let e = name_resolver
+                .type_registery
+                .borrow()
+                .get_as_unknown(e)
+                .unwrap()
+                .1
+                 .1;
             match errors.get_mut(&var.file_id) {
                 Some(v) => v.push(e),
                 None => {
@@ -286,6 +300,13 @@ pub fn resolve_struct_outline(
         let (Struct { fields, .. }, _) = &strct.decl.ast;
         let fields = resolve_multiple(fields.iter().map(|field| &field.ty), &name_resolver);
         for e in fields.iter().filter_map(|r| r.err()) {
+            let e = name_resolver
+                .type_registery
+                .borrow()
+                .get_as_unknown(e)
+                .unwrap()
+                .1
+                 .1;
             match errors.get_mut(&strct.file_id) {
                 Some(v) => v.push(e),
                 None => {
@@ -311,26 +332,16 @@ pub fn resolve_struct_outline(
 fn resolve_singular(
     ty: &Spanned<ParsedType>,
     name_resolver: &FileScopedNameResolver,
-) -> Result<TypeId, SimpleSpan> {
-    let Spanned(t, s) = ty;
-    let name_for_search = *match t {
-        ParsedType::Data(Spanned(name_for_search, _)) => name_for_search,
-        ParsedType::Array(_) => todo!("array type resolution"),
-    };
-    name_resolver.resolve_type(name_for_search).ok_or(*s)
+) -> Result<TypeId, TypeId> {
+    name_resolver.resolve_type(&ty.0)
 }
 
 fn resolve_multiple<'a, I: Iterator<Item = &'a Spanned<ParsedType>>>(
     fields: I,
     name_resolver: &FileScopedNameResolver,
-) -> Box<[Result<TypeId, SimpleSpan>]> {
+) -> Box<[Result<TypeId, TypeId>]> {
     fields
-        .map(|Spanned(ty, span)| match ty {
-            ParsedType::Data(name_to_find) => {
-                name_resolver.resolve_type(name_to_find.0).ok_or(*span)
-            }
-            ParsedType::Array(_) => todo!("array type resolution"),
-        })
+        .map(|ty| name_resolver.resolve_type(&ty.0))
         .collect_vec()
         .into_boxed_slice()
 }

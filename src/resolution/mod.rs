@@ -1,14 +1,19 @@
+use std::cell::RefCell;
+use std::rc::Rc;
+
 use lasso::Spur;
 
+use crate::parsing::ast::ParsedType;
+use crate::parsing::Spanned;
 use crate::project::scopes::ScopeId;
 use crate::project::{Dependencies, DependencyId, FileId, ResolvedUses, TypeRegistry};
-use crate::typing::TypeId;
+use crate::typing::{Type, TypeId};
 
 pub mod name_resolution;
 
 pub struct FileScopedNameResolver<'a> {
     pub dependencies: &'a Dependencies,
-    pub type_registery: &'a TypeRegistry,
+    pub type_registery: Rc<RefCell<TypeRegistry>>,
     pub dependency_id: DependencyId,
     pub scope_id: ScopeId,
     pub file_id: FileId,
@@ -17,7 +22,7 @@ pub struct FileScopedNameResolver<'a> {
 impl<'a> FileScopedNameResolver<'a> {
     pub fn new_with_scope(
         deps: &'a Dependencies,
-        types: &'a TypeRegistry,
+        types: Rc<RefCell<TypeRegistry>>,
         dependency_id: DependencyId,
         scope_id: ScopeId,
     ) -> FileScopedNameResolver<'a> {
@@ -49,7 +54,7 @@ impl<'a> FileScopedNameResolver<'a> {
 
     pub fn new_with_file(
         deps: &'a Dependencies,
-        types: &'a TypeRegistry,
+        types: Rc<RefCell<TypeRegistry>>,
         dependency_id: DependencyId,
         file_id: FileId,
     ) -> FileScopedNameResolver<'a> {
@@ -79,10 +84,23 @@ impl<'a> FileScopedNameResolver<'a> {
         }
     }
 
-    pub fn resolve_type(&self, name_for_search: Spur) -> Option<TypeId> {
+    pub fn resolve_type(&self, parsed_type: &ParsedType) -> Result<TypeId, TypeId> {
         let dependency_id = self.dependency_id;
-        let scopes = self.dependencies.get_dependency_scopes(dependency_id)?;
+        let scopes = self
+            .dependencies
+            .get_dependency_scopes(dependency_id)
+            .expect("Dependency should exist");
         let scope = self.scope_id;
+
+        let (name_for_search, span) = match parsed_type {
+            ParsedType::Data(Spanned(name_for_search, span)) => (*name_for_search, *span),
+            ParsedType::Array(t) => {
+                return Ok(self.type_registery.borrow_mut().register_type(Type::Array {
+                    ty: self.resolve_type(t)?,
+                    size: None,
+                }))
+            }
+        };
 
         scopes
             .scope_children_by_name(scope, name_for_search)
@@ -111,10 +129,16 @@ impl<'a> FileScopedNameResolver<'a> {
                     ),
             )
             .next()
+            .ok_or_else(|| {
+                self.type_registery
+                    .borrow_mut()
+                    .register_type(Type::Unknown(self.file_id, Spanned(name_for_search, span)))
+            })
     }
 
     fn find_in_primitives(&self, name_for_search: Spur) -> Option<TypeId> {
         self.type_registery
+            .borrow()
             .primitive_by_spur(name_for_search)
             .map(|(id, _)| id)
     }
