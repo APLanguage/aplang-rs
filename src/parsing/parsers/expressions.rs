@@ -38,6 +38,7 @@ where EP: TokenParser<'a, I, Expression> + Clone + 'a {
                 .allow_trailing()
                 .at_least(0)
                 .collect_boxed_slice()
+                .boxed()
                 .delimited_by(just(Token::ParenOpen), just(Token::ParenClosed))
                 .or_not()
                 .boxed(),

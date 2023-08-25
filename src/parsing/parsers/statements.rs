@@ -21,6 +21,7 @@ where
             expression_parser().delimited_by(just(Token::ParenOpen), just(Token::ParenClosed)),
         )
         .then(stmt_parser.clone().paddedln())
+        .boxed()
         .then(
             keyword(Identifier::Else)
                 .paddedln()
@@ -34,6 +35,7 @@ where
             other: other.map(Box::new),
         })
         .labelled("if")
+        .boxed()
 }
 
 pub fn while_parser<'a, I, SP>(stmt_parser: SP) -> impl TokenParser<'a, I, ControlFlow> + Clone
@@ -80,7 +82,8 @@ where
         while_parser(stmt_parser),
         keyword(Identifier::Break)
             .map(|_| ControlFlow::Break)
-            .labelled("break"),
+            .labelled("break")
+            .boxed(),
         return_parser(),
     ))
     .labelled("control-flow")
@@ -110,6 +113,7 @@ pub fn statement_parser<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, Stat
             control_flow_parser(p).map(Statement::ControlFlow),
             expression_parser().map(Statement::Expression),
         ))
+        .boxed()
         .then_ignore(choice((
             just(Token::NewLine).repeated().ignored(),
             just(Token::Semicolon).repeated().ignored(),
@@ -117,6 +121,7 @@ pub fn statement_parser<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, Stat
                 .rewind()
                 .ignored(),
         )))
+        .boxed()
         .or(just(Token::Semicolon).map(|_| Statement::None))
     })
     .labelled("statement")

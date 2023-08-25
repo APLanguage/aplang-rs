@@ -46,7 +46,8 @@ pub fn struct_parser<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, Struct>
                 .spur()
                 .map_with_span(Spanned)
                 .paddedln()
-                .labelled("data-identifier"),
+                .labelled("data-identifier")
+                .boxed(),
         )
         .then(
             field_parser()
@@ -54,6 +55,7 @@ pub fn struct_parser<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, Struct>
                 .separated_by(just(Token::Comma))
                 .allow_trailing()
                 .collect_boxed_slice()
+                .boxed()
                 .delimited_by(just(Token::BraceOpen), just(Token::BraceClosed))
                 .labelled("data-fields")
                 .or_not()
@@ -83,17 +85,20 @@ pub fn variable_parser<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, Varia
             keyword(Identifier::Val).to(false),
         ))
         .map_with_span(Spanned)
-        .labelled("var-modifier"),
+        .labelled("var-modifier")
+        .boxed(),
         ident()
             .spur()
             .map_with_span(Spanned)
             .paddedln()
-            .labelled("var-name"),
+            .labelled("var-name")
+            .boxed(),
         just(Token::Colon)
             .paddedln()
             .ignore_then(type_parser().spanned().paddedln().labelled("var-type"))
             .or_not()
-            .labelled("var-colon-type"),
+            .labelled("var-colon-type")
+            .boxed(),
         just(Token::Equal).paddedln(),
         expression_parser()
             .infoed()

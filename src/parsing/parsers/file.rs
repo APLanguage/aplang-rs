@@ -49,7 +49,7 @@ pub fn use_parser<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, UseDeclara
             .separated_by(just(Token::Minus))
             .at_least(1)
             .ignored()
-            .src()
+            .src().boxed()
             .validate(|s, span: SimpleSpan, emitter| {
                 if s.chars().any(|c: char| c.is_whitespace()) {
                     emitter.emit(Rich::custom(span, "No whitespaces are allowed. Should match [a-zA-Z][a-zA-Z0-9]*(-[a-zA-Z0-9]+)*"))
@@ -95,7 +95,7 @@ pub fn use_parser<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, UseDeclara
                                     .labelled("use-path-single-alias")
                                     .or_not()
                                     .map(UsePathEnd::Single)
-                                    .labelled("use-path-single")),
+                                    .labelled("use-path-single").boxed()),
                         )
                         .map(|(paths, end)| UsePath(paths, end))
                 });
@@ -117,6 +117,6 @@ pub fn use_parser<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, UseDeclara
             .map(|(start, use_path)| UseDeclaration {
                 scope: start.into_boxed_slice(),
                 path: use_path,
-            }),
+            }).boxed(),
     )
 }
