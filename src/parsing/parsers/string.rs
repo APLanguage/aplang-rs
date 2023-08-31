@@ -36,7 +36,7 @@ pub fn string_literal_outline_parser<'a, I: CharInput<'a>>(
     return just('r')
         .ignore_then(just('#').repeated().count())
         .then_ignore(just('"'))
-        .then_with_ctx(
+        .ignore_with_ctx(
             any()
                 .and_is(end.not())
                 .repeated()
@@ -54,7 +54,7 @@ pub fn string_parser<'a>(
             just('r')
                 .ignore_then(just('#').repeated().count())
                 .then_ignore(just('"'))
-                .then_with_ctx(
+                .ignore_with_ctx(
                     any()
                         .and_is(end.not())
                         .repeated()
