@@ -8,7 +8,7 @@ use crate::{
         tokenizer::{Operation, OperationGroup},
         Infoable, Infoed, Spanned,
     },
-    project::{DeclarationId, DependencyId, FunctionId, StructId, VariableId},
+    project::{DependencyId, FunctionId, StructId, VariableId},
     typing::TypeId,
 };
 

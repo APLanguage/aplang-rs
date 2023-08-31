@@ -62,6 +62,7 @@ dependencies = [
  "thiserror",
  "toml",
  "traversal",
+ "walkdir 2.3.3 (git+https://github.com/APLanguage/walkdir.git)",
  "winapi-util",
 ]
 
@@ -489,7 +490,7 @@ dependencies = [
  "prodash",
  "sha1_smol",
  "thiserror",
- "walkdir",
+ "walkdir 2.3.3 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -1516,6 +1517,15 @@ name = "walkdir"
 version = "2.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "36df944cda56c7d8d8b7496af378e6b16de9284591917d307c9b4d313c44e698"
+dependencies = [
+ "same-file",
+ "winapi-util",
+]
+
+[[package]]
+name = "walkdir"
+version = "2.3.3"
+source = "git+https://github.com/APLanguage/walkdir.git#d0ec81be39f77ef6991db90959adf1a7b9f01ae6"
 dependencies = [
  "same-file",
  "winapi-util",

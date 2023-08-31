@@ -10,6 +10,7 @@ edition = "2021"
 chumsky = { git = "https://github.com/zesterer/chumsky.git", rev = "56762fe5c965880066a068038a18b5ac07afd75c", features = [
     "label",
 ] }
+walkdir ={ git = "https://github.com/APLanguage/walkdir.git" }
 # chumsky = { version = "1.0.0-alpha.4", features = ["label"] }
 num-traits = "0.2"
 # num-derive = "0.3"

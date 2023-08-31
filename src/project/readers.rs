@@ -15,8 +15,9 @@ use crate::{
     },
     resolution::name_resolution::resolve_workspace_outlines,
     source::{RefVirtualFile, SourceFile},
-    utils::walkdir::{WalkAction, WalkDir},
 };
+
+use walkdir::{WalkAction, WalkDir};
 
 use super::{
     files::APLangWorkspaceFile,

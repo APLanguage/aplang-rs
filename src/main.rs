@@ -38,7 +38,6 @@ pub mod project;
 pub mod resolution;
 pub mod source;
 pub mod typing;
-pub mod utils;
 
 #[derive(Debug)]
 enum PathPartType {
