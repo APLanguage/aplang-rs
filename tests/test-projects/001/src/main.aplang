@@ -6,7 +6,7 @@ struct Person {
 }
 
 fn test_person(person: Person) {
-    println(r##"Hello "## + person.name + r", age " + str(person.age))
+    println(r##"Hello "## + person.name + r", age " + person.age)
 }
 
 fn main() {

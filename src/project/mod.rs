@@ -13,7 +13,7 @@ use crate::{
         },
         FileScopedNameResolver,
     },
-    typing::{IntegerWidth, PrimitiveType, Type, TypeId},
+    typing::{FloatWidth, IntegerWidth, PrimitiveType, Type, TypeId},
 };
 use chumsky::span::SimpleSpan;
 use either::Either;
@@ -40,6 +40,7 @@ pub struct TypeRegistry {
     types: SlotMap<TypeId, Type>,
     primitives_by_spur: HashMap<Spur, (TypeId, PrimitiveType)>,
     primitives_by_name: HashMap<&'static str, (TypeId, PrimitiveType)>,
+    type_id_by_type: HashMap<Type, TypeId>,
 }
 
 impl TypeRegistry {
@@ -47,15 +48,21 @@ impl TypeRegistry {
         let mut types = SlotMap::with_key();
         let mut primitives_by_spur = HashMap::new();
         let mut primitives_by_name = HashMap::new();
+        let mut type_id_by_type = HashMap::new();
+
         macro_rules! insert_into {
             ($s:literal, $v:expr) => {
-                let ty = types.insert(Type::PrimitiveType($v));
-                primitives_by_name.insert($s, (ty, $v));
-                primitives_by_spur.insert(supplier($s), (ty, $v));
+                let pt = $v;
+                let ty = Type::PrimitiveType(pt);
+                let ty_id = types.insert(ty.clone());
+                primitives_by_name.insert($s, (ty_id, pt));
+                primitives_by_spur.insert(supplier($s), (ty_id, pt));
+                type_id_by_type.insert(ty, ty_id);
             };
         }
 
         insert_into!("str", PrimitiveType::String);
+        insert_into!("bool", PrimitiveType::Boolean);
         insert_into!("i8", PrimitiveType::Integer(true, IntegerWidth::_8));
         insert_into!("i16", PrimitiveType::Integer(true, IntegerWidth::_16));
         insert_into!("i32", PrimitiveType::Integer(true, IntegerWidth::_32));
@@ -64,11 +71,15 @@ impl TypeRegistry {
         insert_into!("u16", PrimitiveType::Integer(false, IntegerWidth::_16));
         insert_into!("u32", PrimitiveType::Integer(false, IntegerWidth::_32));
         insert_into!("u64", PrimitiveType::Integer(false, IntegerWidth::_64));
+        insert_into!("f32", PrimitiveType::Float(FloatWidth::_32));
+        insert_into!("f64", PrimitiveType::Float(FloatWidth::_64));
+        insert_into!("unit", PrimitiveType::Unit);
 
         Self {
             types,
             primitives_by_spur,
             primitives_by_name,
+            type_id_by_type,
         }
     }
 
@@ -94,11 +105,36 @@ impl TypeRegistry {
         self.types.insert(ty)
     }
 
+    pub fn get(&self, type_id: TypeId) -> Option<&Type> {
+        self.types.get(type_id)
+    }
+
     pub fn get_as_unknown(&self, type_id: TypeId) -> Option<(FileId, Spanned<Spur>)> {
         self.types.get(type_id).and_then(|t| match t {
             Type::Unknown(f, s) => Some((*f, *s)),
-            _ => None
+            _ => None,
         })
+    }
+
+    pub fn get_as_primitive(&self, type_id: TypeId) -> Option<PrimitiveType> {
+        self.types.get(type_id).and_then(|t| match t {
+            Type::PrimitiveType(t) => Some(*t),
+            _ => None,
+        })
+    }
+
+    pub fn get_as_struct(&self, type_id: TypeId) -> Option<(DependencyId, StructId)> {
+        self.types.get(type_id).and_then(|t| match t {
+            Type::Data(dep, struct_id) => Some((*dep, *struct_id)),
+            _ => None,
+        })
+    }
+
+    pub fn get_by_primitive_type(&self, primitive_type: PrimitiveType) -> TypeId {
+        *self
+            .type_id_by_type
+            .get(&Type::PrimitiveType(primitive_type))
+            .unwrap()
     }
 }
 
@@ -222,6 +258,27 @@ impl DeclarationPool {
     pub fn type_id_of_declaration(&self, dec_id: DeclarationId) -> Option<TypeId> {
         match self.declarations.get(dec_id)? {
             DeclarationDelegate::Struct(id) => Some(self.structs.get(*id)?.decl.ast.1),
+            _ => None,
+        }
+    }
+
+    pub fn declaration_id_as_func(&self, dec_id: DeclarationId) -> Option<FunctionId> {
+        match self.declarations.get(dec_id)? {
+            DeclarationDelegate::Function(id) => Some(*id),
+            _ => None,
+        }
+    }
+
+    pub fn declaration_id_as_var(&self, dec_id: DeclarationId) -> Option<VariableId> {
+        match self.declarations.get(dec_id)? {
+            DeclarationDelegate::Variable(id) => Some(*id),
+            _ => None,
+        }
+    }
+
+    pub fn declaration_id_as_struct(&self, dec_id: DeclarationId) -> Option<StructId> {
+        match self.declarations.get(dec_id)? {
+            DeclarationDelegate::Struct(id) => Some(*id),
             _ => None,
         }
     }

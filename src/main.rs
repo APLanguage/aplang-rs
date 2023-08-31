@@ -12,7 +12,7 @@ use crate::{
         readers::{read_workspace, ReadWorkspaceError, ReadWorkspaceResult},
         Workspace,
     },
-    resolution::name_resolution::resolve_workspace_outlines,
+    resolution::{name_resolution::resolve_workspace_outlines, type_resolution::resolve_and_typecheck_functions},
 };
 use chumsky::{error::RichReason, prelude::Rich, primitive::end, ParseResult, Parser};
 use itertools::Itertools;
@@ -102,6 +102,7 @@ fn main() {
             // }
             return;
         }
+        resolve_and_typecheck_functions(&mut workspace, dependency_id);
         println!("No use resolution errors found.")
     }
 

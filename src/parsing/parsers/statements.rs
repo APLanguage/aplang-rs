@@ -15,7 +15,7 @@ use super::{declarations::variable_parser, TokenParserExt};
 pub fn if_parser<'a, I, SP>(stmt_parser: SP) -> impl TokenParser<'a, I, ControlFlow> + Clone
 where
     I: TokenInput<'a>,
-    SP: TokenParser<'a, I, Statement> + Clone + 'a, {
+    SP: TokenParser<'a, I, Spanned<Statement>> + Clone + 'a, {
     keyword(Identifier::If)
         .ignore_then(
             expression_parser().delimited_by(just(Token::ParenOpen), just(Token::ParenClosed)),
@@ -41,7 +41,7 @@ where
 pub fn while_parser<'a, I, SP>(stmt_parser: SP) -> impl TokenParser<'a, I, ControlFlow> + Clone
 where
     I: TokenInput<'a>,
-    SP: TokenParser<'a, I, Statement> + Clone + 'a, {
+    SP: TokenParser<'a, I, Spanned<Statement>> + Clone + 'a, {
     keyword(Identifier::While)
         .ignore_then(
             expression_parser()
@@ -76,7 +76,7 @@ pub fn control_flow_parser<'a, I, SP>(
 ) -> impl TokenParser<'a, I, ControlFlow> + Clone
 where
     I: TokenInput<'a>,
-    SP: TokenParser<'a, I, Statement> + Clone + 'a, {
+    SP: TokenParser<'a, I, Spanned<Statement>> + Clone + 'a, {
     choice((
         if_parser(stmt_parser.clone()),
         while_parser(stmt_parser),
@@ -104,8 +104,9 @@ fn return_parser<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, ControlFlow
         .boxed()
 }
 
-pub fn statement_parser<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, Statement> + Clone {
-    recursive(|p| {
+pub fn statement_parser<'a, I: TokenInput<'a>>(
+) -> impl TokenParser<'a, I, Spanned<Statement>> + Clone {
+    recursive::<_, Spanned<Statement>, _, _, _>(|p| {
         choice((
             variable_parser()
                 .map(Declaration::Variable)
@@ -113,7 +114,7 @@ pub fn statement_parser<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, Stat
             control_flow_parser(p).map(Statement::ControlFlow),
             expression_parser().map(Statement::Expression),
         ))
-        .boxed()
+        .spanned()
         .then_ignore(choice((
             just(Token::NewLine).repeated().ignored(),
             just(Token::Semicolon).repeated().ignored(),
@@ -122,8 +123,7 @@ pub fn statement_parser<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, Stat
                 .ignored(),
         )))
         .boxed()
-        .or(just(Token::Semicolon).map(|_| Statement::None))
+        .or(just(Token::Semicolon).map(|_| Statement::None).spanned())
     })
     .labelled("statement")
-    .boxed()
 }

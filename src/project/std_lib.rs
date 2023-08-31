@@ -11,6 +11,10 @@ use super::{
 
 const STD_LIB_SRC: &str = r##"
 fn println(input: str) {}
+fn str(input: u8) -> str {}
+fn str(input: u16) -> str {}
+fn str(input: u32) -> str {}
+fn str(input: u64) -> str {}
 "##;
 
 pub fn create_std_lib(dependency_id: DependencyId, rodeo: &mut Rodeo, types: &mut TypeRegistry) -> Project {

@@ -53,7 +53,7 @@ impl LiteralType {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 #[repr(u8)]
 pub enum LiteralWidth {
     Inferred = 0,
@@ -111,11 +111,12 @@ where T: PrimInt {
 static NUMBER_REGEX: OnceLock<Regex> = OnceLock::new();
 
 pub fn parse_complex_number(input: &str) -> NumberLiteralResult {
-    let Some(captures) = NUMBER_REGEX.get_or_init(|| {
-                Regex::new(r"^(0x|0b|0o)?(\w+?(?:\.\w+?)*)?(?:([uif])(\d+))?$").unwrap()
-            }).captures(input) else {
-                return Err(NumberLiteralError::Error);
-            };
+    let Some(captures) = NUMBER_REGEX
+        .get_or_init(|| Regex::new(r"^(0x|0b|0o)?(\w+?(?:\.\w+?)*)?(?:([uif])(\d+))?$").unwrap())
+        .captures(input)
+    else {
+        return Err(NumberLiteralError::Error);
+    };
     let value = captures.get(2).map(|m| m.as_str().to_owned());
     let radix = captures
         .get(1)
@@ -184,6 +185,21 @@ pub fn parse_complex_number(input: &str) -> NumberLiteralResult {
     };
     let (num_type, width) = num_type_width.unwrap();
     let width = LiteralWidth::try_from(width).map_err(num_type.width_error())?;
+    let width = match (num_type.clone(), width) {
+        (_, LiteralWidth::Inferred) => width,
+        (LiteralType::Signed | LiteralType::Unsigned, LiteralWidth::_8) => width,
+        (LiteralType::Signed | LiteralType::Unsigned, LiteralWidth::_16) => width,
+        (_, LiteralWidth::_32) => width,
+        (_, LiteralWidth::_64) => width,
+        (_, LiteralWidth::_8) => {
+            return Err((num_type.width_error())(LiteralWidthError::NotSupported(8)))
+        }
+        (_, LiteralWidth::_16) => {
+            return Err((num_type.width_error())(LiteralWidthError::NotSupported(
+                16,
+            )))
+        }
+    };
     use LiteralType::*;
     match num_type {
         Unsigned => match parse_number(&number_part, radix) {

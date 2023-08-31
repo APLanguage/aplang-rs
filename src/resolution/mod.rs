@@ -6,10 +6,14 @@ use lasso::Spur;
 use crate::parsing::ast::ParsedType;
 use crate::parsing::Spanned;
 use crate::project::scopes::ScopeId;
-use crate::project::{Dependencies, DependencyId, FileId, ResolvedUses, TypeRegistry};
-use crate::typing::{Type, TypeId};
+use crate::project::{
+    Dependencies, DependencyId, FileId, FunctionId, ResolvedUses, StructId, TypeRegistry,
+};
+use crate::typing::{PrimitiveType, Type, TypeId};
 
+pub mod fir;
 pub mod name_resolution;
+pub mod type_resolution;
 
 pub struct FileScopedNameResolver<'a> {
     pub dependencies: &'a Dependencies,
@@ -141,5 +145,49 @@ impl<'a> FileScopedNameResolver<'a> {
             .borrow()
             .primitive_by_spur(name_for_search)
             .map(|(id, _)| id)
+    }
+
+    fn resolve_primitive(&self, primitive: PrimitiveType) -> TypeId {
+        self.type_registery
+            .borrow()
+            .get_by_primitive_type(primitive)
+    }
+
+    fn register_type(&self, ty: Type) -> TypeId {
+        self.type_registery.borrow_mut().register_type(ty)
+    }
+
+    fn resolve_fn(
+        &self,
+        identifier: Spur,
+    ) -> impl Iterator<Item = (DependencyId, FunctionId)> + 'a {
+        self.resolved_uses
+            .find(identifier)
+            .filter_map(|(dep, sp_id)| {
+                let project = &self.dependencies.get_dependency(dep)?.project;
+                Some((
+                    dep,
+                    project
+                        .pool
+                        .declaration_id_as_func(project.scopes.scope_as_declaration(sp_id)?.1)?,
+                ))
+            })
+    }
+
+    fn resolve_struct(
+        &self,
+        identifier: Spur,
+    ) -> impl Iterator<Item = (DependencyId, StructId)> + 'a {
+        self.resolved_uses
+            .find(identifier)
+            .filter_map(|(dep, sp_id)| {
+                let project = &self.dependencies.get_dependency(dep)?.project;
+                Some((
+                    dep,
+                    project
+                        .pool
+                        .declaration_id_as_struct(project.scopes.scope_as_declaration(sp_id)?.1)?,
+                ))
+            })
     }
 }

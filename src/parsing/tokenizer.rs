@@ -2,7 +2,7 @@ use super::parsers::{
     string::{string_literal_outline_parser, StringLiteralType},
     TokenInput, TokenParser,
 };
-use chumsky::{prelude::*, input::Stream};
+use chumsky::{input::Stream, prelude::*};
 use logos::{Lexer, Logos, Source};
 
 #[derive(Logos, Debug, PartialEq, Eq, Clone, Hash)]
@@ -35,7 +35,6 @@ pub enum Identifier {
 
     #[regex(".+")]
     Custom,
-
 }
 
 fn string_parser_callback(lex: &mut Lexer<Token>) -> Option<StringLiteralType> {
@@ -216,6 +215,15 @@ pub enum Operation {
 
     Not,
     Unknown,
+}
+#[derive(PartialEq, Eq, Debug, Clone, Copy)]
+pub enum OperationGroup {
+    Logic,
+    Equality,
+    Comparison,
+    Term,
+    Factor,
+    Bitops,
 }
 
 impl From<Token> for Operation {

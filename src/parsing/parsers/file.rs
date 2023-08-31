@@ -60,7 +60,6 @@ pub fn use_parser<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, UseDeclara
             .at_least(1)
             .collect::<Vec<_>>()
             .labelled("use-scope")
-            .boxed()
             .delimited_by(just(Token::ParenOpen), just(Token::ParenClosed))
             .labelled("use-scope-delimiters")
             .boxed()

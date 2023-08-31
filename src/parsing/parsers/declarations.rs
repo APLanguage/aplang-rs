@@ -101,7 +101,7 @@ pub fn variable_parser<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, Varia
             .boxed(),
         just(Token::Equal).paddedln(),
         expression_parser()
-            .infoed()
+            .spanned()
             .boxed()
             .labelled("var-expression"),
     ))

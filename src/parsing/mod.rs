@@ -9,7 +9,7 @@ pub mod tokenizer;
 #[derive(Debug, PartialEq)]
 pub struct Infoed<T: Infoable> {
     pub inner: T,
-    pub info: Option<T::Info>,
+    pub info: T::Info,
     pub span: SimpleSpan,
 }
 
@@ -30,16 +30,8 @@ pub enum Info {
     DeclarationRef(Option<DeclarationRef>),
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash)]
 pub struct Spanned<T>(pub T, pub SimpleSpan);
-
-impl<T: Copy> Copy for Spanned<T> {}
-
-impl<T: Clone> Clone for Spanned<T> {
-    fn clone(&self) -> Self {
-        Self(self.0.clone(), self.1)
-    }
-}
 
 impl<T> Spanned<T> {
     pub fn map_new<R, F>(&self, mapping: F) -> Spanned<R>

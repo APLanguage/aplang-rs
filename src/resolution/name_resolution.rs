@@ -145,8 +145,8 @@ pub fn resolve_uses(
 
 #[derive(Debug)]
 pub struct ResolvedFunctionOutline {
-    parameters: Box<[Result<TypeId, TypeId>]>,
-    ret_ty: Option<Result<TypeId, TypeId>>,
+    pub parameters: Box<[Result<TypeId, TypeId>]>,
+    pub ret_ty: Option<Result<TypeId, TypeId>>,
 }
 
 #[derive(Debug)]
@@ -156,7 +156,7 @@ pub struct ResolvedVariableOutline {
 
 #[derive(Debug)]
 pub struct ResolvedStructOutline {
-    fields: Box<[Result<TypeId, TypeId>]>,
+    pub fields: Box<[Result<TypeId, TypeId>]>,
 }
 
 pub fn resolve_workspace_outlines(

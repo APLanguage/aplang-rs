@@ -94,7 +94,7 @@ pub struct Function {
     pub name: Spanned<Spur>,
     pub parameters: Box<[Parameter]>,
     pub ty: Option<Spanned<ParsedType>>,
-    pub statements: Box<[Statement]>,
+    pub statements: Box<[Spanned<Statement>]>,
 }
 
 #[derive(Debug)]
@@ -102,7 +102,7 @@ pub struct Variable {
     pub reassignable: Spanned<bool>,
     pub name: Spanned<Spur>,
     pub ty: Option<Spanned<ParsedType>>,
-    pub expression: Infoed<Expression>,
+    pub expression: Spanned<Expression>,
 }
 
 #[derive(Debug)]

@@ -9,12 +9,12 @@ use super::declarations::Declaration;
 pub enum ControlFlow {
     If {
         condition: Expression,
-        then: Box<Statement>,
-        other: Option<Box<Statement>>,
+        then: Box<Spanned<Statement>>,
+        other: Option<Box<Spanned<Statement>>>,
     },
     While {
         condition: Expression,
-        statements: Box<[Statement]>,
+        statements: Box<[Spanned<Statement>]>,
     },
     Return(Option<Spanned<Expression>>),
     Break,

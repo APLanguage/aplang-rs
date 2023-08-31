@@ -2,17 +2,19 @@ pub mod typedast;
 
 use std::num::NonZeroUsize;
 
+use chumsky::span::SimpleSpan;
 use lasso::Spur;
 use slotmap::new_key_type;
 
 use crate::{
-    project::{DependencyId, StructId, FileId},
-    source::DeclarationPath, parsing::Spanned,
+    parsing::{Spanned, parsers::number::LiteralWidth},
+    project::{DependencyId, FileId, StructId},
+    source::DeclarationPath,
 };
 
 new_key_type! { pub struct TypeId; }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Eq , Hash  )]
 pub enum OperationResult {
     If {
         condition: TypeId,
@@ -21,7 +23,7 @@ pub enum OperationResult {
     },
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Eq , Hash )]
 pub enum Type {
     PrimitiveType(PrimitiveType),
     Data(DependencyId, StructId),
@@ -40,11 +42,12 @@ pub enum Type {
     Ref(TypeId),
     OperationResult(OperationResult),
     Unknown(FileId, Spanned<Spur>),
+    Error(FileId, SimpleSpan, &'static str),
     Unit,
     Nothing,
 }
 
-#[derive(Clone, Debug, PartialEq, Copy)]
+#[derive(Clone, Debug, PartialEq, Copy, Eq, Hash)]
 #[repr(u8)]
 pub enum IntegerWidth {
     _8 = 8,
@@ -75,7 +78,20 @@ impl TryFrom<u64> for IntegerWidth {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Copy)]
+impl From<LiteralWidth> for IntegerWidth {
+    fn from(value: LiteralWidth) -> Self {
+        use IntegerWidth::*;
+        match value {
+            LiteralWidth::Inferred => _64,
+            LiteralWidth::_8 => _8,
+            LiteralWidth::_16 => _16,
+            LiteralWidth::_32 => _32,
+            LiteralWidth::_64 => _64,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Copy, Hash, Eq)]
 #[repr(u8)]
 pub enum FloatWidth {
     _32 = 32,
@@ -102,9 +118,23 @@ impl TryFrom<u64> for FloatWidth {
     }
 }
 
-#[derive(Debug, PartialEq, Clone, Copy)]
+impl From<LiteralWidth> for FloatWidth {
+    fn from(value: LiteralWidth) -> Self {
+        use FloatWidth::*;
+        match value {
+            LiteralWidth::Inferred => _64,
+            LiteralWidth::_32 => _32,
+            LiteralWidth::_64 => _64,
+            _ => panic!("shouldn't happen that the width of floats is 8 or 16.")
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Clone, Copy, Eq, Hash)]
 pub enum PrimitiveType {
     String,
     Integer(bool, IntegerWidth),
     Float(FloatWidth),
+    Boolean,
+    Unit,
 }

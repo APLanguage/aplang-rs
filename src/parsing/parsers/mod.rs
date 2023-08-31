@@ -9,8 +9,7 @@ use crate::source::SourceFile;
 
 use super::{
     tokenizer::{newline, Token},
-    Spanned,
-    Infoable, Infoed,
+    Infoable, Infoed, Spanned,
 };
 
 pub mod declarations;
@@ -70,12 +69,17 @@ pub trait TokenParserExt<'a, I, O>: TokenParser<'a, I, O> + Clone
 where
     I: TokenInput<'a>,
     O: Debug, {
-    fn infoed(self) -> impl TokenParser<'a, I, Infoed<O>> + Clone
-    where O: Infoable + Debug {
-        self.map_with_state(|t, span, _state| Infoed {
-            inner: t,
-            info: None,
-            span,
+    fn infoed<F, IA>(self, func: F) -> impl TokenParser<'a, I, Infoed<O>> + Clone
+    where
+        O: Infoable<Info = IA> + Debug + Clone,
+        F: (Fn(O, SimpleSpan, &mut ParserState<'a>) -> (O, IA)) + Clone, {
+        self.map_with_state(move |t, span, _state| {
+            let (t, info) = func(t, span, _state);
+            Infoed {
+                inner: t,
+                info,
+                span,
+            }
         })
     }
 
