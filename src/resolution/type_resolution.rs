@@ -20,6 +20,7 @@ use crate::{
         DeclarationInfo, DeclarationResolutionStage, DependencyId, FileId, FunctionId, StructId,
         Workspace,
     },
+    resolution::fir::AssignableTarget,
     typing::{self, typedast::Variable, PrimitiveType, Type, TypeId},
 };
 
@@ -126,10 +127,6 @@ impl<'a> ResolutionEnv<'a> {
         }
     }
 
-    fn resolve_var_dclr(&mut self, dclr: &ast::declarations::Variable) -> fir::LocalVarId {
-        todo!()
-    }
-
     fn resolve_expression(
         &mut self,
         try_to_be: Option<TypeId>,
@@ -164,7 +161,7 @@ impl<'a> ResolutionEnv<'a> {
                 call,
                 op,
                 expression,
-            } => todo!("Expression::Assignement"),
+            } => self.resolve_assignement(call, *op, expression),
             ast::expressions::Expression::Binary {
                 lhs,
                 op,
@@ -501,7 +498,16 @@ impl<'a> ResolutionEnv<'a> {
                 Operation::Addition,
                 (Some(PrimitiveType::String), _) | (_, Some(PrimitiveType::String)),
             ) => self.resolve_primitive(PrimitiveType::String),
-
+            (
+                Term, _, (Some(PrimitiveType::Integer(true, w1)), Some(PrimitiveType::Integer(true, w2)))
+            ) => {
+                self.resolve_primitive(PrimitiveType::Integer(true, w1.max(w2)))
+            }
+            (
+                Term, _, (Some(PrimitiveType::Integer(false, w1)), Some(PrimitiveType::Integer(false, w2)))
+            ) => {
+                self.resolve_primitive(PrimitiveType::Integer(false, w1.max(w2)))
+            }
             _ => todo!("resolve_binary/other ops"),
         };
         (
@@ -580,6 +586,47 @@ impl<'a> ResolutionEnv<'a> {
                 fir::Statement::VariableDeclaration { var_id, expr }
             }
             _ => todo!("resolve_declaration/other declarations"),
+        }
+    }
+    fn resolve_assignement(
+        &mut self,
+        call: &Spanned<ast::expressions::Expression>,
+        op: Spanned<Operation>,
+        expression: &Spanned<ast::expressions::Expression>,
+    ) -> (TypeId, fir::Expression) {
+        let Spanned(call, call_span) = call;
+        let Spanned(op, op_span) = op;
+        let Spanned(expr, expr_span) = expression;
+        match call {
+            ast::expressions::Expression::CallChain { expression, calls } => {
+                todo!("Expression::Assignement/Expression::CallChain")
+            }
+            ast::expressions::Expression::Call(CallKind::Identifier(Spanned(name, _))) => {
+                let Some((ty, var_ty)) = self.find_var(*name) else {
+                    todo!("Expression::Assignement/Expression::Call/not found")
+                };
+                let Infoed {
+                    inner: fir_expr,
+                    info: expr_ty,
+                    ..
+                } = self.resolve_expression(Some(ty), expr, *expr_span);
+                if ty != expr_ty {
+                    todo!("Expression::Assignement/Expression::Call/ty false")
+                }
+                (
+                    expr_ty,
+                    fir::Expression::Assignement {
+                        call: Spanned(AssignableTarget::Var(ty, var_ty), *call_span),
+                        op: Spanned(op, op_span),
+                        expression: Box::new(Infoed {
+                            inner: fir_expr,
+                            info: expr_ty,
+                            span: *expr_span,
+                        }),
+                    },
+                )
+            }
+            _ => todo!("Expression::Assignement/handle wrong lhs"),
         }
     }
 }

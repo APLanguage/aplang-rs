@@ -46,7 +46,7 @@ pub enum Expression {
         group: OperationGroup,
     },
     Assignement {
-        call: Spanned<CallKind>,
+        call: Box<Spanned<Expression>>,
         op: Spanned<Operation>,
         expression: Box<Spanned<Expression>>,
     },

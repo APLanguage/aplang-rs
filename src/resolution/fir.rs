@@ -24,7 +24,7 @@ pub struct Function {
 pub enum VariableType {
     Local(LocalVarId),
     Parameter(usize),
-    Outside(DependencyId, VariableId)
+    Outside(DependencyId, VariableId),
 }
 
 #[derive(Debug, PartialEq)]
@@ -37,6 +37,10 @@ pub enum CallKind {
         parameters: Box<[Infoed<Expression>]>,
     },
     Unresolved,
+}
+#[derive(Debug, PartialEq)]
+pub enum AssignableTarget {
+    Var(TypeId, VariableType),
 }
 
 #[derive(Debug, PartialEq)]
@@ -65,7 +69,7 @@ pub enum Expression {
         group: OperationGroup,
     },
     Assignement {
-        call: Spanned<CallKind>,
+        call: Spanned<AssignableTarget>,
         op: Spanned<Operation>,
         expression: Box<Infoed<Expression>>,
     },

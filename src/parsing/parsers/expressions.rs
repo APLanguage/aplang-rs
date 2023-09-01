@@ -60,9 +60,10 @@ pub fn assignment_parser<'a, EP, I: TokenInput<'a>>(
 ) -> impl TokenParser<'a, I, Expression> + Clone
 where EP: TokenParser<'a, I, Expression> + Clone + 'a {
     group((
-        call(expr_parser.clone())
+        atom_parser(expr_parser.clone())
             .spanned()
-            .labelled("assignement_left"),
+            .labelled("assignement_left")
+            .map_into(),
         ops_parser!(
             Equal,
             PlusEqual,
@@ -83,12 +84,15 @@ where EP: TokenParser<'a, I, Expression> + Clone + 'a {
         .map_with_span(Spanned)
         .labelled("assignement_operator")
         .paddedln(),
-        expr_parser.spanned().labelled("assignement_right"),
+        expr_parser
+            .spanned()
+            .labelled("assignement_right")
+            .map_into(),
     ))
     .map(|(call, op, expression)| Expression::Assignement {
         call,
         op,
-        expression: Box::new(expression),
+        expression,
     })
     .boxed()
     .labelled("assignement")
@@ -105,16 +109,18 @@ where EP: TokenParser<'a, I, Expression> + Clone + 'a {
                 .spanned()
                 .paddedln()
                 .delimited_by(just(Token::ParenOpen), just(Token::ParenClosed))
-                .boxed(),
-            expr_parser.clone().spanned().paddedln(),
+                .boxed()
+                .map_into(),
+            expr_parser.clone().spanned().paddedln().map_into(),
             keyword(Identifier::Else)
                 .paddedln()
-                .ignore_then(expr_parser.spanned()),
+                .ignore_then(expr_parser.spanned())
+                .map_into(),
         )))
         .map(|(condition, then, other)| Expression::If {
-            condition: Box::new(condition),
-            then: Box::new(then),
-            other: Box::new(other),
+            condition,
+            then,
+            other,
         })
         .boxed()
 }
@@ -227,7 +233,7 @@ macro_rules! binary_parser {
         }
     };
 }
-// TODO: 
+// TODO:
 #[rustfmt::skip] binary_parser!(binary, logic, equality, ops_parser!(BarBar, AmpersandAmpersand));
 #[rustfmt::skip] binary_parser!(operation_chain, equality, comparison, ops_parser!(BangEqual, EqualEqual));
 #[rustfmt::skip] binary_parser!(operation_chain, comparison, term, ops_parser!(GreaterEqual, LessEqual, Greater, Less));

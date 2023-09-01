@@ -104,6 +104,10 @@ where
     fn spanned(self) -> impl TokenParser<'a, I, Spanned<O>> + Clone {
         self.map_with_span(Spanned)
     }
+
+    fn map_into<R: From<O>>(self) ->impl TokenParser<'a, I, R> + Clone {
+        self.map(Into::into)
+    }
 }
 
 impl<'a, I, O, T> TokenParserExt<'a, I, O> for T

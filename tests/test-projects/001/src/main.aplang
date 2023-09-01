@@ -10,8 +10,11 @@ fn test_person(person: Person) {
 }
 
 fn main() {
+    var e = 2u16
+    var c = 1u16
+    var d = 1u16
     var a = c + (d = e)
     println(r"Hello World!")
-    val person = Person(r"Amejonah", 42)
+    val person = Person(r"Amejonah", 42u8)
     test_person(person)
 }

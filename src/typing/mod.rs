@@ -47,7 +47,7 @@ pub enum Type {
     Nothing,
 }
 
-#[derive(Clone, Debug, PartialEq, Copy, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Copy, Eq, Hash, PartialOrd, Ord)]
 #[repr(u8)]
 pub enum IntegerWidth {
     _8 = 8,
