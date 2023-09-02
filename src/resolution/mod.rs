@@ -134,9 +134,16 @@ impl<'a> FileScopedNameResolver<'a> {
             )
             .next()
             .ok_or_else(|| {
-                self.type_registery
-                    .borrow_mut()
-                    .register_type(Type::Unknown(self.file_id, Spanned(name_for_search, span)))
+                let ty_reg = &mut self.type_registery.borrow_mut();
+                ty_reg
+                    .primitive_by_spur(name_for_search)
+                    .map(|(ty, _)| ty)
+                    .unwrap_or_else(|| {
+                        ty_reg.register_type(Type::Unknown(
+                            self.file_id,
+                            Spanned(name_for_search, span),
+                        ))
+                    })
             })
     }
 

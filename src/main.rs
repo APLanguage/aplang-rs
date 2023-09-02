@@ -3,18 +3,28 @@
 #![allow(unused_macros)]
 #![feature(trait_alias)]
 #![feature(return_position_impl_trait_in_trait)]
+#![feature(iter_collect_into)]
 
-use std::path::Path;
+use std::{ops::Range, path::Path};
 
 use crate::{
-    parsing::parsers::{expressions::expression_parser, file::File},
+    parsing::{
+        parsers::{expressions::expression_parser, file::File},
+        Spanned,
+    },
     project::{
         readers::{read_workspace, ReadWorkspaceError, ReadWorkspaceResult},
         Workspace,
     },
-    resolution::{name_resolution::resolve_workspace_outlines, type_resolution::resolve_and_typecheck_functions},
+    resolution::{
+        name_resolution::resolve_workspace_outlines,
+        type_resolution::{resolve_and_typecheck_functions, TypeResError},
+    },
 };
-use chumsky::{error::RichReason, prelude::Rich, primitive::end, ParseResult, Parser};
+use ariadne::ReportBuilder;
+use chumsky::{
+    error::RichReason, prelude::Rich, primitive::end, span::SimpleSpan, ParseResult, Parser,
+};
 use itertools::Itertools;
 use lasso::Rodeo;
 use parsing::{
@@ -75,9 +85,10 @@ fn main() {
         let mut is_errors = false;
         println!("Resolving...");
         let dependency_id = workspace.project_dep_id();
-        for (file_id, errs) in resolve_workspace_outlines(&mut rodeo, &mut workspace, dependency_id).iter() {
+        for (file_id, errs) in resolve_workspace_outlines(&mut rodeo, &mut workspace, dependency_id)
+        {
             is_errors = true;
-            let file = workspace.project().files.file_by_id(*file_id).unwrap();
+            let file = workspace.project().files.file_by_id(file_id).unwrap();
             let mut colors = ariadne::ColorGenerator::new();
             // Generate & choose some colours for each of our elements
             let input_name = file.path().as_display().to_string();
@@ -85,7 +96,7 @@ fn main() {
                 ariadne::Report::build(ariadne::ReportKind::Error, &input_name, err.start)
                     .with_message("Not found somthing.")
                     .with_label(
-                        ariadne::Label::new((&input_name, err.into_iter()))
+                        ariadne::Label::new((&input_name, err.into_range()))
                             .with_message("↑ where 🍌?")
                             .with_color(colors.next()),
                     )
@@ -101,7 +112,85 @@ fn main() {
             // }
             return;
         }
-        resolve_and_typecheck_functions(&mut workspace, dependency_id);
+        for (file_id, errs) in resolve_and_typecheck_functions(&mut workspace, dependency_id) {
+            is_errors = true;
+            let file = workspace.project().files.file_by_id(file_id).unwrap();
+            // Generate & choose some colours for each of our elements
+            let input_name = file.path().as_display().to_string();
+            for Spanned(err, span) in errs {
+                let rep: ReportBuilder<'_, _> = ariadne::Report::<(&'_ str, Range<usize>)>::build(
+                    ariadne::ReportKind::Error,
+                    &input_name as &str,
+                    span.start,
+                );
+                use TypeResError::*;
+                let mut colors = ariadne::ColorGenerator::new();
+                match err {
+                    FunctionNotFound(Spanned(name, span), params) => {
+                        let params = params
+                            .into_iter()
+                            .map(|ty_id| {
+                                ty_id.map_new(|ty_id| {
+                                    workspace.type_registery.borrow().display_type(*ty_id)
+                                })
+                            })
+                            .collect_vec();
+                        let mut rep = rep
+                            .with_message(
+                                "Couldn't find function matching types: (".to_string()
+                                    + &params.iter().map(|Spanned(t, _)| t).join(", ")
+                                    + ")",
+                            )
+                            .with_label(
+                                ariadne::Label::new((&input_name as &str, span.into_range()))
+                                    .with_color(colors.next()),
+                            );
+                        for param in params {
+                            rep.add_label(
+                                ariadne::Label::new((&input_name as &str, param.1.into_range()))
+                                    .with_color(colors.next())
+                                    .with_message(format!("this is of type: {}", param.0)),
+                            )
+                        }
+                        rep
+                    }
+                    VariableNotFound(Spanned(name, span)) => {
+                        rep.with_message("Variable not found").with_label(
+                            ariadne::Label::new((&input_name as &str, span.into_range()))
+                                .with_color(colors.next()),
+                        )
+                    }
+                    TypesAreNotMatching(a, b) => rep
+                        .with_message("Types are not matching")
+                        .with_label(
+                            ariadne::Label::new((&input_name as &str, a.1.into_range()))
+                                .with_color(colors.next())
+                                .with_message(format!(
+                                    "this is of type: {}",
+                                    workspace.type_registery.borrow().display_type(a.0)
+                                )),
+                        )
+                        .with_label(
+                            ariadne::Label::new((&input_name as &str, b.1.into_range()))
+                                .with_color(colors.next())
+                                .with_message(format!(
+                                    "this is of type: {}",
+                                    workspace.type_registery.borrow().display_type(b.0)
+                                )),
+                        ),
+                }
+                .finish()
+                .print((&input_name as &str, ariadne::Source::from(file.src())))
+                .unwrap();
+            }
+        }
+        if is_errors {
+            println!("Errors found, cannot go further.");
+            // for (spur, s) in rodeo.into_iter() {
+            //     println!("  {spur:>3?}: {s}")
+            // }
+            return;
+        }
         println!("No use resolution errors found.")
     }
 

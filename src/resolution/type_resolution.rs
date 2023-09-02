@@ -2,9 +2,9 @@
 #![allow(unused)]
 #![allow(clippy::needless_pass_by_ref_mut)]
 // TODO: remove all 3
-use std::ops::ControlFlow;
+use std::{collections::HashMap, ops::ControlFlow, vec::Vec};
 
-use chumsky::span::SimpleSpan;
+use chumsky::span::{SimpleSpan, Span};
 use itertools::Itertools;
 use lasso::Spur;
 use slotmap::SlotMap;
@@ -30,8 +30,12 @@ use super::{
     FileScopedNameResolver,
 };
 
-pub fn resolve_and_typecheck_functions(workspace: &mut Workspace, dependency_id: DependencyId) {
+pub fn resolve_and_typecheck_functions(
+    workspace: &mut Workspace,
+    dependency_id: DependencyId,
+) -> HashMap<FileId, Vec<Spanned<TypeResError>>> {
     let workspace_read: &Workspace = workspace;
+    let mut errors = HashMap::new();
     for (func_id, func_info) in workspace_read
         .dependencies
         .get_dependency(dependency_id)
@@ -41,19 +45,22 @@ pub fn resolve_and_typecheck_functions(workspace: &mut Workspace, dependency_id:
         .functions
         .iter()
     {
-        resolve_function(
+        let (func, errs) = resolve_function(
             workspace_read.resolver_by_file(dependency_id, func_info.file_id),
             func_id,
             func_info,
         );
+        errs.into_iter()
+            .collect_into(errors.entry(func_info.file_id).or_insert_with(Vec::new));
     }
+    errors
 }
 
 fn resolve_function(
     resolver: FileScopedNameResolver,
     func_id: FunctionId,
     func_info: &DeclarationInfo<ast::declarations::Function, ResolvedFunctionOutline>,
-) -> (fir::Function, Vec<TypeResError>) {
+) -> (fir::Function, Vec<Spanned<TypeResError>>) {
     let mut env = ResolutionEnv::new(resolver, func_id, func_info);
     let statements = func_info
         .decl
@@ -69,8 +76,9 @@ fn resolve_function(
 
 #[derive(Debug)]
 pub enum TypeResError {
-    FunctionNotFound(Spanned<Spur>, Vec<TypeId>, SimpleSpan),
-    VariableNotFound(Spanned<Spur>, SimpleSpan),
+    FunctionNotFound(Spanned<Spur>, Vec<Spanned<TypeId>>),
+    VariableNotFound(Spanned<Spur>),
+    TypesAreNotMatching(Spanned<TypeId>, Spanned<TypeId>),
 }
 
 struct ResolutionEnv<'a> {
@@ -80,7 +88,7 @@ struct ResolutionEnv<'a> {
     func_id: FunctionId,
     func_info: &'a DeclarationInfo<ast::declarations::Function, ResolvedFunctionOutline>,
     func_info_outline: &'a ResolvedFunctionOutline,
-    errors: Vec<TypeResError>,
+    errors: Vec<Spanned<TypeResError>>,
 }
 
 impl<'a> ResolutionEnv<'a> {
@@ -271,7 +279,7 @@ impl<'a> ResolutionEnv<'a> {
                         fir::Expression::Call(Spanned(fir::CallKind::Variable(target), span)),
                     )
                 } else {
-                    self.add_error(TypeResError::VariableNotFound(name.to_owned(), span));
+                    self.add_error(TypeResError::VariableNotFound(name.to_owned()), span);
                     (
                         self.resolver
                             .type_registery
@@ -279,7 +287,7 @@ impl<'a> ResolutionEnv<'a> {
                             .register_type(Type::Error(
                                 self.func_info.file_id,
                                 span,
-                                "unresolved function",
+                                "unresolved variable",
                             )),
                         fir::Expression::Call(Spanned(fir::CallKind::Unresolved, span)),
                     )
@@ -301,11 +309,16 @@ impl<'a> ResolutionEnv<'a> {
                     )
                     .next()
                 else {
-                    self.add_error(TypeResError::FunctionNotFound(
-                        identifier.to_owned(),
-                        parameters.iter().map(|t| t.info.to_owned()).collect_vec(),
+                    self.add_error(
+                        TypeResError::FunctionNotFound(
+                            identifier.to_owned(),
+                            parameters
+                                .iter()
+                                .map(|t| t.as_spanned_info().into())
+                                .collect_vec(),
+                        ),
                         span,
-                    ));
+                    );
                     return (
                         self.resolver
                             .type_registery
@@ -421,7 +434,7 @@ impl<'a> ResolutionEnv<'a> {
         let iter = self
             .resolver
             .resolve_fn(identifier)
-            .filter_map(|(dep, f_id)| {
+            .filter_map(move |(dep, f_id)| {
                 let DeclarationInfo {
                     decl: DeclarationResolutionStage { outline, .. },
                     file_id,
@@ -440,17 +453,35 @@ impl<'a> ResolutionEnv<'a> {
                 else {
                     return None;
                 };
+                // println!(
+                //     "testing {:?}: ({}) vs ({})",
+                //     identifier.to_owned(),
+                //     parameters
+                //         .iter()
+                //         .map(|ty| self.resolver.type_registery.borrow().display_type(*ty))
+                //         .join(", "),
+                //     resolved_parameters
+                //         .iter()
+                //         .map(|ty| self
+                //             .resolver
+                //             .type_registery
+                //             .borrow()
+                //             .display_type(ty.unwrap_or_else(|t| t)))
+                //         .join(", ")
+                // );
                 if parameters.len() != resolved_parameters.len() {
+                    // println!("len not matched");
                     return None;
                 }
                 if parameters
                     .iter()
                     .zip_eq(resolved_parameters.iter())
                     .any(|(a, b)| match b.to_owned() {
-                        Ok(t) => *a == t,
-                        Err(_) => false,
+                        Ok(t) => *a != t,
+                        Err(_) => true,
                     })
                 {
+                    // println!("types not matching");
                     return None;
                 }
                 Some((dep, f_id, ret_ty.to_owned()))
@@ -499,15 +530,15 @@ impl<'a> ResolutionEnv<'a> {
                 (Some(PrimitiveType::String), _) | (_, Some(PrimitiveType::String)),
             ) => self.resolve_primitive(PrimitiveType::String),
             (
-                Term, _, (Some(PrimitiveType::Integer(true, w1)), Some(PrimitiveType::Integer(true, w2)))
-            ) => {
-                self.resolve_primitive(PrimitiveType::Integer(true, w1.max(w2)))
-            }
+                Term,
+                _,
+                (Some(PrimitiveType::Integer(true, w1)), Some(PrimitiveType::Integer(true, w2))),
+            ) => self.resolve_primitive(PrimitiveType::Integer(true, w1.max(w2))),
             (
-                Term, _, (Some(PrimitiveType::Integer(false, w1)), Some(PrimitiveType::Integer(false, w2)))
-            ) => {
-                self.resolve_primitive(PrimitiveType::Integer(false, w1.max(w2)))
-            }
+                Term,
+                _,
+                (Some(PrimitiveType::Integer(false, w1)), Some(PrimitiveType::Integer(false, w2))),
+            ) => self.resolve_primitive(PrimitiveType::Integer(false, w1.max(w2))),
             _ => todo!("resolve_binary/other ops"),
         };
         (
@@ -561,8 +592,8 @@ impl<'a> ResolutionEnv<'a> {
             })
     }
 
-    fn add_error(&mut self, error: TypeResError) {
-        self.errors.push(error)
+    fn add_error(&mut self, error: TypeResError, span: SimpleSpan) {
+        self.errors.push(Spanned(error, span))
     }
 
     fn resolve_declaration(&mut self, delr: &ast::declarations::Declaration) -> fir::Statement {
@@ -601,7 +632,7 @@ impl<'a> ResolutionEnv<'a> {
             ast::expressions::Expression::CallChain { expression, calls } => {
                 todo!("Expression::Assignement/Expression::CallChain")
             }
-            ast::expressions::Expression::Call(CallKind::Identifier(Spanned(name, _))) => {
+            ast::expressions::Expression::Call(CallKind::Identifier(Spanned(name, var_span))) => {
                 let Some((ty, var_ty)) = self.find_var(*name) else {
                     todo!("Expression::Assignement/Expression::Call/not found")
                 };
@@ -611,20 +642,39 @@ impl<'a> ResolutionEnv<'a> {
                     ..
                 } = self.resolve_expression(Some(ty), expr, *expr_span);
                 if ty != expr_ty {
-                    todo!("Expression::Assignement/Expression::Call/ty false")
+                    self.add_error(
+                        TypeResError::TypesAreNotMatching(
+                            Spanned(ty, *var_span),
+                            Spanned(expr_ty, *expr_span),
+                        ),
+                        (call_span.start..expr_span.end).into(),
+                    );
+                    (
+                        ty,
+                        fir::Expression::Assignement {
+                            call: Spanned(AssignableTarget::Var(ty, var_ty), *call_span),
+                            op: Spanned(op, op_span),
+                            expression: Box::new(Infoed {
+                                inner: fir_expr,
+                                info: expr_ty,
+                                span: *expr_span,
+                            }),
+                        },
+                    )
+                } else {
+                    (
+                        expr_ty,
+                        fir::Expression::Assignement {
+                            call: Spanned(AssignableTarget::Var(ty, var_ty), *call_span),
+                            op: Spanned(op, op_span),
+                            expression: Box::new(Infoed {
+                                inner: fir_expr,
+                                info: expr_ty,
+                                span: *expr_span,
+                            }),
+                        },
+                    )
                 }
-                (
-                    expr_ty,
-                    fir::Expression::Assignement {
-                        call: Spanned(AssignableTarget::Var(ty, var_ty), *call_span),
-                        op: Spanned(op, op_span),
-                        expression: Box::new(Infoed {
-                            inner: fir_expr,
-                            info: expr_ty,
-                            span: *expr_span,
-                        }),
-                    },
-                )
             }
             _ => todo!("Expression::Assignement/handle wrong lhs"),
         }

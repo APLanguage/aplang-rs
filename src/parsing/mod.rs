@@ -13,6 +13,27 @@ pub struct Infoed<T: Infoable> {
     pub span: SimpleSpan,
 }
 
+impl <T: Infoable> Infoed<T> {
+    pub fn into_spanned_inner(self) -> Spanned<T> {
+        self.into()
+    }
+
+    pub fn into_spanned_info(self) -> Spanned<T::Info> {
+        let Infoed { inner: _, info, span } = self;
+        Spanned(info, span)
+    }
+
+    pub fn as_spanned_inner(&self) -> Spanned<&T> {
+        let Infoed { inner, info: _, span } = self;
+        Spanned(inner, *span)
+    }
+
+    pub fn as_spanned_info(&self) -> Spanned<&T::Info> {
+        let Infoed { inner: _, info, span } = self;
+        Spanned(info, *span)
+    }
+}
+
 pub trait Infoable {
     type Info;
 }
@@ -53,5 +74,11 @@ impl<T> Spanned<T> {
 impl<T: Infoable> From<Infoed<T>> for Spanned<T> {
     fn from(val: Infoed<T>) -> Self {
         Spanned(val.inner, val.span)
+    }
+}
+
+impl<T: ToOwned<Owned = T>> From<Spanned<&T>> for Spanned<T> {
+    fn from(val: Spanned<&T>) -> Self {
+        Spanned(val.0.to_owned(), val.1)
     }
 }

@@ -115,12 +115,10 @@ pub fn resolve_uses(
                     }
                     Err(i) => {
                         resolved.add_error(flat_spans[i]);
-                        match errors.get_mut(&module.file_id) {
-                            Some(v) => v.push(flat_spans[i]),
-                            None => {
-                                errors.insert(module.file_id, vec![flat_spans[i]]);
-                            }
-                        }
+                        errors
+                            .entry(module.file_id)
+                            .or_insert_with(std::vec::Vec::new)
+                            .push(flat_spans[i]);
                     }
                 }
             }
@@ -173,7 +171,8 @@ pub fn resolve_workspace_outlines(
     let struct_errs = resolve_struct_outline(workspace, dependency_id);
     let mut errs = HashMap::new();
     for (k, v) in func_errs.into_iter().chain(var_errs).chain(struct_errs) {
-        errs.insert(k, v);
+        v.into_iter()
+            .collect_into(errs.entry(k).or_insert_with(Vec::new));
     }
     errs
 }

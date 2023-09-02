@@ -102,7 +102,10 @@ impl TypeRegistry {
     }
 
     pub fn register_type(&mut self, ty: Type) -> TypeId {
-        self.types.insert(ty)
+        match self.type_id_by_type.get(&ty) {
+            Some(ty) => *ty,
+            None => self.types.insert(ty),
+        }
     }
 
     pub fn get(&self, type_id: TypeId) -> Option<&Type> {
@@ -136,7 +139,52 @@ impl TypeRegistry {
             .get(&Type::PrimitiveType(primitive_type))
             .unwrap()
     }
+
+    pub fn display_type(&self, type_id: TypeId) -> String {
+        self.get(type_id).map_or_else(
+            || "?".to_string(),
+            |ty| match ty {
+                Type::PrimitiveType(ty) => Self::display_primitive_type(ty).to_string(),
+                Type::Data(_, _) => todo!("Type::Data"),
+                Type::Array { ty: _, size: _ } => todo!("Type::Array"),
+                Type::Function { parameters: _, retty: _ } => todo!("Type::Function"),
+                Type::Trait(_) => todo!("Type::Trait"),
+                Type::Union(_) => todo!("Type::Union"),
+                Type::Intersection(_) => todo!("Type::Intersection"),
+                Type::InternalUnion(_) => todo!("Type::InternalUnion"),
+                Type::Ref(_) => todo!("Type::Ref"),
+                Type::OperationResult(_) => todo!("Type::OperationResult"),
+                Type::Unknown(_, _) => todo!("Type::Unknown"),
+                Type::Error(_, _, e) => "!<".to_owned() + e + ">!",
+                Type::Unit => todo!("Type::Unit"),
+                Type::Nothing => todo!("Type::Nothing"),
+            },
+        ) + &format!("[{:?}]", type_id)
+    }
+    fn display_primitive_type(ty: &PrimitiveType) -> &str {
+        use PrimitiveType::*;
+        match ty {
+            String => "str",
+            Integer(signed, w) => match (signed, w) {
+                (true, IntegerWidth::_8) => "i8",
+                (true, IntegerWidth::_16) => "i16",
+                (true, IntegerWidth::_32) => "i32",
+                (true, IntegerWidth::_64) => "i64",
+                (false, IntegerWidth::_8) => "u8",
+                (false, IntegerWidth::_16) => "u16",
+                (false, IntegerWidth::_32) => "u32",
+                (false, IntegerWidth::_64) => "u64",
+            },
+            Float(w) => match w {
+                FloatWidth::_32 => "f32",
+                FloatWidth::_64 => "f64",
+            },
+            Boolean => "bool",
+            Unit => "unit",
+        }
+    }
 }
+
 
 pub struct Workspace {
     pub aplang_file: APLangWorkspaceFile,
