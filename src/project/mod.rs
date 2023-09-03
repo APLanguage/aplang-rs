@@ -144,7 +144,7 @@ impl TypeRegistry {
         self.get(type_id).map_or_else(
             || "?".to_string(),
             |ty| match ty {
-                Type::PrimitiveType(ty) => Self::display_primitive_type(ty).to_string(),
+                Type::PrimitiveType(ty) => Self::display_primitive_type(*ty).to_string(),
                 Type::Data(_, _) => todo!("Type::Data"),
                 Type::Array { ty: _, size: _ } => todo!("Type::Array"),
                 Type::Function {
@@ -164,20 +164,11 @@ impl TypeRegistry {
             },
         ) + &format!("[{:?}]", type_id)
     }
-    fn display_primitive_type(ty: &PrimitiveType) -> &str {
+    pub fn display_primitive_type(ty: PrimitiveType) -> &'static str {
         use PrimitiveType::*;
         match ty {
             String => "str",
-            Integer(signed, w) => match (signed, w) {
-                (true, IntegerWidth::_8) => "i8",
-                (true, IntegerWidth::_16) => "i16",
-                (true, IntegerWidth::_32) => "i32",
-                (true, IntegerWidth::_64) => "i64",
-                (false, IntegerWidth::_8) => "u8",
-                (false, IntegerWidth::_16) => "u16",
-                (false, IntegerWidth::_32) => "u32",
-                (false, IntegerWidth::_64) => "u64",
-            },
+            Integer(signed, w) => display_integer_type(signed, w),
             Float(w) => match w {
                 FloatWidth::_32 => "f32",
                 FloatWidth::_64 => "f64",
@@ -185,6 +176,19 @@ impl TypeRegistry {
             Boolean => "bool",
             Unit => "unit",
         }
+    }
+}
+
+pub fn display_integer_type(signed: bool, w: IntegerWidth) -> &'static str {
+    match (signed, w) {
+        (true, IntegerWidth::_8) => "i8",
+        (true, IntegerWidth::_16) => "i16",
+        (true, IntegerWidth::_32) => "i32",
+        (true, IntegerWidth::_64) => "i64",
+        (false, IntegerWidth::_8) => "u8",
+        (false, IntegerWidth::_16) => "u16",
+        (false, IntegerWidth::_32) => "u32",
+        (false, IntegerWidth::_64) => "u64",
     }
 }
 

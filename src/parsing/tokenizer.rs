@@ -4,6 +4,7 @@ use super::parsers::{
 };
 use chumsky::{input::Stream, prelude::*};
 use logos::{Lexer, Logos, Source};
+use strum_macros::Display;
 
 #[derive(Logos, Debug, PartialEq, Eq, Clone, Hash)]
 pub enum Identifier {
@@ -182,7 +183,7 @@ pub enum Token {
     Error,
 }
 
-#[derive(PartialEq, Eq, Debug, Clone, Copy)]
+#[derive(PartialEq, Eq, Debug, Clone, Copy, Display)]
 pub enum Operation {
     Addition,
     Substraction,
@@ -216,7 +217,7 @@ pub enum Operation {
     Not,
     Unknown,
 }
-#[derive(PartialEq, Eq, Debug, Clone, Copy)]
+#[derive(PartialEq, Eq, Debug, Clone, Copy, Display)]
 pub enum OperationGroup {
     Logic,
     Equality,

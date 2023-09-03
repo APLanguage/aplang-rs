@@ -22,7 +22,7 @@ use crate::{
         Workspace,
     },
     resolution::fir::AssignableTarget,
-    typing::{self, typedast::Variable, PrimitiveType, Type, TypeId},
+    typing::{self, typedast::Variable, IntegerWidth, PrimitiveType, Type, TypeId},
 };
 
 use super::{
@@ -78,9 +78,10 @@ fn resolve_function(
 #[derive(Debug)]
 pub enum TypeResError {
     FunctionNotFound(Spanned<Spur>, Vec<Spanned<TypeId>>),
-    VariableNotFound(Spanned<Spur>),
+    VariableNotFound(Spanned<Spur>, Option<TypeId>),
     FieldNotFound(Spanned<(DependencyId, StructId)>, Spanned<Spur>),
     TypesAreNotMatching(Spanned<TypeId>, Spanned<TypeId>),
+    SignNotMatching(Spanned<(bool, IntegerWidth)>, OperationGroup, Spanned<Operation>, Spanned<(bool, IntegerWidth)>),
 }
 
 struct ResolutionEnv<'a> {
@@ -150,7 +151,7 @@ impl<'a> ResolutionEnv<'a> {
             ),
             ast::expressions::Expression::Number(rslt) => self.resolve_number_literal(rslt, span),
             ast::expressions::Expression::Call(call_kind) => {
-                self.resolve_call_kind(span, None, call_kind)
+                self.resolve_call_kind(span, try_to_be, call_kind)
             }
 
             ast::expressions::Expression::Unary { ops, expression } => todo!("Expression::Unary"),
@@ -177,7 +178,7 @@ impl<'a> ResolutionEnv<'a> {
                 op,
                 rhs,
                 group,
-            } => self.resolve_binary(lhs.as_ref(), op.to_owned(), rhs.as_ref(), *group),
+            } => self.resolve_binary(try_to_be, lhs.as_ref(), op.to_owned(), rhs.as_ref(), *group),
             // _ => todo!(),
         };
         Infoed {
@@ -311,7 +312,7 @@ impl<'a> ResolutionEnv<'a> {
                         fir::Expression::Call(Spanned(fir::CallKind::Variable(target), span)),
                     )
                 } else {
-                    self.add_error(TypeResError::VariableNotFound(name.to_owned()), span);
+                    self.add_error(TypeResError::VariableNotFound(name.to_owned(), try_to_be), span);
                     (
                         self.resolver
                             .type_registery
@@ -561,6 +562,7 @@ impl<'a> ResolutionEnv<'a> {
 
     fn resolve_binary(
         &mut self,
+        try_to_be: Option<TypeId>,
         lhs: &Spanned<ast::expressions::Expression>,
         op: Spanned<Operation>,
         rhs: &Spanned<ast::expressions::Expression>,
@@ -569,7 +571,7 @@ impl<'a> ResolutionEnv<'a> {
         let Spanned(lhs, lhs_span) = lhs;
         let Spanned(rhs, rhs_span) = rhs;
         let lhs = self.resolve_expression(None, lhs, *lhs_span);
-        let rhs = self.resolve_expression(None, rhs, *rhs_span);
+        let rhs = self.resolve_expression(Some(lhs.info), rhs, *rhs_span);
         let lhs_get_as_primitive = self
             .resolver
             .type_registery
@@ -596,9 +598,19 @@ impl<'a> ResolutionEnv<'a> {
                 (Some(PrimitiveType::Integer(s1, w1)), Some(PrimitiveType::Integer(s2, w2))),
             ) => {
                 if s1 != s2 {
-                    todo!("PrimitiveType::Integer/not same sign")
+                    self.add_error(
+                        TypeResError::SignNotMatching(
+                            Spanned((s1, w1), lhs.span),
+                            group,
+                            op,
+                            Spanned((s2, w2), rhs.span),
+                        ),
+                        (lhs.span.start..rhs.span.end).into(),
+                    );
+                    try_to_be.unwrap_or(lhs.info)
+                } else {
+                    self.resolve_primitive(PrimitiveType::Integer(s1, w1.max(w2)))
                 }
-                self.resolve_primitive(PrimitiveType::Integer(s1, w1.max(w2)))
             }
             (
                 Term | Factor,

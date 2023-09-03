@@ -233,7 +233,7 @@ macro_rules! binary_parser {
         }
     };
 }
-// TODO:
+// TODO: make some parser a chain for less recursion
 #[rustfmt::skip] binary_parser!(binary, logic, equality, ops_parser!(BarBar, AmpersandAmpersand));
 #[rustfmt::skip] binary_parser!(operation_chain, equality, comparison, ops_parser!(BangEqual, EqualEqual));
 #[rustfmt::skip] binary_parser!(operation_chain, comparison, term, ops_parser!(GreaterEqual, LessEqual, Greater, Less));
@@ -292,6 +292,7 @@ where
             operator_parser
                 .spanned()
                 .paddedln()
+                // TODO fix new line consuming on last foldl run
                 .then(next_parser.spanned().paddedln())
                 .repeated(),
             move |lhs, (op, rhs)| {

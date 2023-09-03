@@ -10,7 +10,7 @@ edition = "2021"
 chumsky = { git = "https://github.com/zesterer/chumsky.git", rev = "56762fe5c965880066a068038a18b5ac07afd75c", features = [
     "label",
 ] }
-walkdir ={ git = "https://github.com/APLanguage/walkdir.git" }
+walkdir = { git = "https://github.com/APLanguage/walkdir.git" }
 # chumsky = { version = "1.0.0-alpha.4", features = ["label"] }
 num-traits = "0.2"
 # num-derive = "0.3"
@@ -25,11 +25,13 @@ either = "1.9"
 lasso = "0.7"
 indextree = "4.6"
 slotmap = "1.0.6"
-ariadne = "0.3"
+ariadne = { git = "https://github.com/APLanguage/ariadne.git", rev = "bdc392368fb45e71aff0feca58d0bf66f56698ae"}
 itertools = "0.11"
 toml = "0.7.6"
 serde = { version = "1.0", features = ["derive"] }
 same-file = "1.0.6"
+strum = "0.25"
+strum_macros = "0.25"
 
 [target.'cfg(windows)'.dependencies.winapi-util]
 version = "0.1.5"

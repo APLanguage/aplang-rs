@@ -13,6 +13,7 @@ use crate::{
         Spanned,
     },
     project::{
+        display_integer_type,
         readers::{read_workspace, ReadWorkspaceError, ReadWorkspaceResult},
         Workspace,
     },
@@ -21,7 +22,7 @@ use crate::{
         type_resolution::{resolve_and_typecheck_functions, TypeResError},
     },
 };
-use ariadne::ReportBuilder;
+use ariadne::{Fmt, ReportBuilder};
 use chumsky::{error::RichReason, prelude::Rich, primitive::end, ParseResult, Parser};
 use itertools::Itertools;
 use lasso::Rodeo;
@@ -92,7 +93,7 @@ fn main() {
             let input_name = file.path().as_display().to_string();
             for err in errs {
                 ariadne::Report::build(ariadne::ReportKind::Error, &input_name, err.start)
-                    .with_message("Not found somthing.")
+                    .with_message("Not found something.")
                     .with_label(
                         ariadne::Label::new((&input_name, err.into_range()))
                             .with_message("↑ where 🍌?")
@@ -124,7 +125,7 @@ fn main() {
                 use TypeResError::*;
                 let mut colors = ariadne::ColorGenerator::new();
                 match err {
-                    FunctionNotFound(Spanned(_name, span), params) => {
+                    FunctionNotFound(Spanned(name, span), params) => {
                         let params = params
                             .into_iter()
                             .map(|ty_id| {
@@ -133,45 +134,54 @@ fn main() {
                                 })
                             })
                             .collect_vec();
+                        let fn_color = colors.next();
                         let mut rep = rep
-                            .with_message("Couldn't find function matching parameter types")
+                            .with_message(format!("Couldn't find function `{}` matching parameter types", rodeo.resolve(&name).fg(fn_color)))
                             .with_label(
                                 ariadne::Label::new((&input_name as &str, span.into_range()))
-                                    .with_color(colors.next()),
+                                    .with_color(fn_color),
                             );
                         for param in params {
+                            let param_color = colors.next();
                             rep.add_label(
                                 ariadne::Label::new((&input_name as &str, param.1.into_range()))
-                                    .with_color(colors.next())
-                                    .with_message(format!("this is of type: {}", param.0)),
+                                    .with_color(param_color)
+                                    .with_message(format!("this is of type: {}", param.0.fg(param_color))),
                             )
                         }
                         rep
                     }
-                    VariableNotFound(Spanned(_name, span)) => {
-                        rep.with_message("Variable not found").with_label(
+                    VariableNotFound(Spanned(name, span), try_to_be) => {
+                        let color = colors.next();
+                        let mut rep = rep.with_message(format!("Variable `{}` cannot be found in scope", rodeo.resolve(&name).fg(color))).with_label(
                             ariadne::Label::new((&input_name as &str, span.into_range()))
-                                .with_color(colors.next()),
-                        )
+                                .with_color(color),
+                        );
+                        if let Some(ty) = try_to_be {
+                            rep.add_note(format!("The type of the variable needs to be a `{}`.", workspace.type_registery.borrow().display_type(ty).fg(color)))
+                        }
+                        rep
                     }
                     TypesAreNotMatching(a, b) => rep
                         .with_message("Types are not matching")
-                        .with_label(
+                        .with_label({
+                            let color = colors.next();
                             ariadne::Label::new((&input_name as &str, a.1.into_range()))
-                                .with_color(colors.next())
+                                .with_color(color)
                                 .with_message(format!(
                                     "this is of type: {}",
-                                    workspace.type_registery.borrow().display_type(a.0)
-                                )),
-                        )
-                        .with_label(
+                                    workspace.type_registery.borrow().display_type(a.0).fg(color)
+                                ))
+                        })
+                        .with_label({
+                            let color = colors.next();
                             ariadne::Label::new((&input_name as &str, b.1.into_range()))
-                                .with_color(colors.next())
+                                .with_color(color)
                                 .with_message(format!(
                                     "this is of type: {}",
-                                    workspace.type_registery.borrow().display_type(b.0)
-                                )),
-                        ),
+                                    workspace.type_registery.borrow().display_type(b.0).fg(color)
+                                ))
+                        }),
                     FieldNotFound(
                         Spanned((dep, struct_id), base_span),
                         Spanned(name, name_span),
@@ -183,25 +193,59 @@ fn main() {
                             .struct_path(struct_id)
                             .map(|s| rodeo.resolve(&s))
                             .join("::");
+                        let struct_color = colors.next();
                         rep.with_message(format!(
                             "No field `{}` found for struct ({}) {}",
-                            rodeo.resolve(&name),
-                            project_name,
-                            struct_path,
+                            rodeo.resolve(&name).fg(struct_color),
+                            project_name.fg(struct_color),
+                            struct_path.fg(struct_color),
                         ))
-                        .with_label(
+                        .with_label({
                             ariadne::Label::new((&input_name as &str, base_span.into_range()))
-                                .with_color(colors.next())
+                                .with_color(struct_color)
                                 .with_message(format!(
                                     "this returns struct: ({}) {}",
-                                    project_name, struct_path,
-                                )),
-                        )
+                                    project_name.fg(struct_color), struct_path.fg(struct_color),
+                                ))
+                        })
                         .with_label(
                             ariadne::Label::new((&input_name as &str, name_span.into_range()))
-                                .with_color(colors.next()).with_message("Cannot find this field"),
+                                .with_color(colors.next())
+                                .with_message("Cannot find this field"),
                         )
                     }
+                    SignNotMatching(Spanned((s1, w1), span1),group, op, Spanned((s2, w2), span2)) => {
+                        let int1_color = colors.next();
+                        let int2_color = colors.next();
+                        let op_color = colors.next();
+
+                        rep
+                        .with_message(format!(
+                            "Mismatching signedness of ints: {} ({}) on {} and {} cannot be computed.",
+                            op.0.fg(op_color),
+                            group.fg(op_color),
+                            display_integer_type(s1, w1).fg(int1_color),
+                            display_integer_type(s2, w2).fg(int2_color)
+                        ))
+                        .with_note("Operations work only on the same number type (int or float),\nfor ints there is an additional requirement of them needing to have the same signedness.")
+                        .with_label(
+                            ariadne::Label::new((&input_name as &str, span1.into_range()))
+                                .with_color(int1_color)
+                                .with_message(format!(
+                                    "This is of type {}",
+                                    display_integer_type(s1, w1).fg(int1_color)
+                                ))
+                        )
+                        .with_label(
+                            ariadne::Label::new((&input_name as &str, span2.into_range()))
+                                .with_color(int2_color)
+                                .with_message(format!(
+                                    "This is of type {}",
+                                    display_integer_type(s2, w2).fg(int2_color)
+                                ))
+                        ).with_label(ariadne::Label::new((&input_name as &str, op.1.into_range()))
+                        .with_color(op_color))
+                    },
                 }
                 .finish()
                 .print((&input_name as &str, ariadne::Source::from(file.src())))
