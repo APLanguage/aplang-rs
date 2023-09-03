@@ -560,15 +560,22 @@ impl<'a> ResolutionEnv<'a> {
                 (Some(PrimitiveType::String), _) | (_, Some(PrimitiveType::String)),
             ) => self.resolve_primitive(PrimitiveType::String),
             (
-                Term,
+                Term | Factor,
                 _,
-                (Some(PrimitiveType::Integer(true, w1)), Some(PrimitiveType::Integer(true, w2))),
-            ) => self.resolve_primitive(PrimitiveType::Integer(true, w1.max(w2))),
+                (Some(PrimitiveType::Integer(s1, w1)), Some(PrimitiveType::Integer(s2, w2))),
+            ) => {
+                if s1 != s2 {
+                    todo!("PrimitiveType::Integer/not same sign")
+                }
+                self.resolve_primitive(PrimitiveType::Integer(s1, w1.max(w2)))
+            },
             (
-                Term,
+                Term | Factor,
                 _,
-                (Some(PrimitiveType::Integer(false, w1)), Some(PrimitiveType::Integer(false, w2))),
-            ) => self.resolve_primitive(PrimitiveType::Integer(false, w1.max(w2))),
+                (Some(PrimitiveType::Float(w1)), Some(PrimitiveType::Float(w2))),
+            ) => {
+                self.resolve_primitive(PrimitiveType::Float(w1.max(w2)))
+            },
             _ => todo!("resolve_binary/other ops"),
         };
         (

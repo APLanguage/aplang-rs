@@ -13,7 +13,7 @@ fn main() {
     var e = 2u16
     var c = 1u16
     var d = 1u16
-    var a = c + (d = e)
+    var a = c + (d = e) - 2u16 / 2u16
     println(r"Hello World!")
     val person = Person(r"Amejonah", 42u8)
     test_person(person)

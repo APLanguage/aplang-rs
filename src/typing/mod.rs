@@ -91,7 +91,7 @@ impl From<LiteralWidth> for IntegerWidth {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Copy, Hash, Eq)]
+#[derive(Clone, Debug, PartialEq, Copy, Hash, Eq, PartialOrd, Ord)]
 #[repr(u8)]
 pub enum FloatWidth {
     _32 = 32,
