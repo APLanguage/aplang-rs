@@ -22,9 +22,7 @@ use crate::{
     },
 };
 use ariadne::ReportBuilder;
-use chumsky::{
-    error::RichReason, prelude::Rich, primitive::end, ParseResult, Parser,
-};
+use chumsky::{error::RichReason, prelude::Rich, primitive::end, ParseResult, Parser};
 use itertools::Itertools;
 use lasso::Rodeo;
 use parsing::{
@@ -137,9 +135,7 @@ fn main() {
                             .collect_vec();
                         let mut rep = rep
                             .with_message(
-                                "Couldn't find function matching types: (".to_string()
-                                    + &params.iter().map(|Spanned(t, _)| t).join(", ")
-                                    + ")",
+                                "Couldn't find function matching parameter types",
                             )
                             .with_label(
                                 ariadne::Label::new((&input_name as &str, span.into_range()))
@@ -178,6 +174,29 @@ fn main() {
                                     workspace.type_registery.borrow().display_type(b.0)
                                 )),
                         ),
+                    FieldNotFound(
+                        Spanned((dep, struct_id), base_span),
+                        Spanned(_name, name_span),
+                    ) => {
+                        let dep = workspace.dependencies.get_dependency(dep).unwrap();
+                        rep.with_message("Field not found of struct")
+                            .with_label(
+                                ariadne::Label::new((&input_name as &str, base_span.into_range()))
+                                    .with_color(colors.next())
+                                    .with_message(format!(
+                                        "this returns struct: ({}) {}",
+                                        rodeo.resolve(&dep.name),
+                                        dep.project
+                                            .struct_path(struct_id)
+                                            .map(|s| rodeo.resolve(&s))
+                                            .join("::"),
+                                    )),
+                            )
+                            .with_label(
+                                ariadne::Label::new((&input_name as &str, name_span.into_range()))
+                                    .with_color(colors.next()),
+                            )
+                    }
                 }
                 .finish()
                 .print((&input_name as &str, ariadne::Source::from(file.src())))

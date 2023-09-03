@@ -20,7 +20,7 @@ pub struct Scopes {
     root: NodeId,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ScopeId {
     node: NodeId,
 }

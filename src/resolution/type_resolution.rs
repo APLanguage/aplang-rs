@@ -79,6 +79,7 @@ fn resolve_function(
 pub enum TypeResError {
     FunctionNotFound(Spanned<Spur>, Vec<Spanned<TypeId>>),
     VariableNotFound(Spanned<Spur>),
+    FieldNotFound(Spanned<(DependencyId, StructId)>, Spanned<Spur>),
     TypesAreNotMatching(Spanned<TypeId>, Spanned<TypeId>),
 }
 
@@ -204,7 +205,37 @@ impl<'a> ResolutionEnv<'a> {
                 todo!("Expression::CallChain/methods")
             };
             let Some(fid) = self.find_field_in_struct(dep, struct_id, *name) else {
-                todo!("Expression::CallChain/handle not founds")
+                self.add_error(
+                    TypeResError::FieldNotFound(
+                        Spanned(
+                            (dep, struct_id),
+                            the_calls
+                                .last()
+                                .map(|(Spanned(_, s), _)| *s)
+                                .unwrap_or_else(|| base.span),
+                        ),
+                        Spanned(*name, *span),
+                    ),
+                    *span,
+                );
+                return (
+                    self.resolver
+                        .type_registery
+                        .borrow_mut()
+                        .register_type(Type::Error(
+                            self.func_info.file_id,
+                            *span,
+                            "field not found",
+                        )),
+                    fir::Expression::CallChain {
+                        expression: Box::new(base),
+                        calls: the_calls
+                            .into_iter()
+                            .map(|(ck, _)| ck)
+                            .collect_vec()
+                            .into_boxed_slice(),
+                    },
+                );
             };
             this = self.resolver
             .dependencies
@@ -222,7 +253,7 @@ impl<'a> ResolutionEnv<'a> {
                         .get(fid)?
                         .unwrap_or_else(|t| t),
                 )
-            }).expect("should have been resolved and the the siue of both ast and outline should match");
+            }).expect("should have been resolved and the field id of both ast and outline should match");
             the_calls.push((
                 Spanned(fir::CallKind::StructField(dep, struct_id, fid), *span),
                 this,
@@ -568,14 +599,12 @@ impl<'a> ResolutionEnv<'a> {
                     todo!("PrimitiveType::Integer/not same sign")
                 }
                 self.resolve_primitive(PrimitiveType::Integer(s1, w1.max(w2)))
-            },
+            }
             (
                 Term | Factor,
                 _,
                 (Some(PrimitiveType::Float(w1)), Some(PrimitiveType::Float(w2))),
-            ) => {
-                self.resolve_primitive(PrimitiveType::Float(w1.max(w2)))
-            },
+            ) => self.resolve_primitive(PrimitiveType::Float(w1.max(w2))),
             _ => todo!("resolve_binary/other ops"),
         };
         (

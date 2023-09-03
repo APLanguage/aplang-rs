@@ -147,7 +147,10 @@ impl TypeRegistry {
                 Type::PrimitiveType(ty) => Self::display_primitive_type(ty).to_string(),
                 Type::Data(_, _) => todo!("Type::Data"),
                 Type::Array { ty: _, size: _ } => todo!("Type::Array"),
-                Type::Function { parameters: _, retty: _ } => todo!("Type::Function"),
+                Type::Function {
+                    parameters: _,
+                    retty: _,
+                } => todo!("Type::Function"),
                 Type::Trait(_) => todo!("Type::Trait"),
                 Type::Union(_) => todo!("Type::Union"),
                 Type::Intersection(_) => todo!("Type::Intersection"),
@@ -184,7 +187,6 @@ impl TypeRegistry {
         }
     }
 }
-
 
 pub struct Workspace {
     pub aplang_file: APLangWorkspaceFile,
@@ -367,6 +369,33 @@ pub struct Project {
     pub pool: DeclarationPool,
     pub files: Files,
     pub scopes: Scopes,
+}
+impl Project {
+    pub fn struct_path<'a>(&'a self, struct_id: StructId) -> impl Iterator<Item = Spur> + 'a {
+        let mut scope_id = self
+            .scopes
+            .scope_of_declaration(self.pool.declaration_id_of_struct(struct_id).unwrap())
+            .unwrap();
+        let root = self.scopes.root_id();
+        let mut path = vec![scope_id];
+
+        while let Some(s) = self.scopes.parent(scope_id) {
+            scope_id = s;
+            if scope_id == root {
+                break;
+            }
+            path.push(scope_id);
+        }
+
+        path.into_iter()
+            .rev()
+            .map(|s| *match self.scopes.scope(s).unwrap() {
+                ScopeType::Declaration(s, _) => s,
+                ScopeType::File(s, _) => s,
+                ScopeType::Package(s) => s,
+                ScopeType::Root(_) => unreachable!(),
+            })
+    }
 }
 
 pub struct AstFiles {

@@ -17,4 +17,5 @@ fn main() {
     println(r"Hello World!")
     val person = Person(r"Amejonah", 42u8)
     test_person(person)
+    println(Person(r"Amejonah", 42u8).nam)
 }
