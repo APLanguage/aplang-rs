@@ -6,7 +6,7 @@ use std::{collections::HashMap, ops::ControlFlow, vec::Vec};
 
 use chumsky::span::{SimpleSpan, Span};
 use either::Either;
-use itertools::Itertools;
+use itertools::{FoldWhile, Itertools};
 use lasso::Spur;
 use slotmap::SlotMap;
 
@@ -87,6 +87,7 @@ pub enum TypeResError {
         Spanned<Operation>,
         Spanned<(bool, IntegerWidth)>,
     ),
+    UnaryUnapplicable(Spanned<Operation>, Spanned<TypeId>),
 }
 
 struct ResolutionEnv<'a> {
@@ -176,6 +177,9 @@ impl<'a> ResolutionEnv<'a> {
                 rhs,
                 group,
             } => self.resolve_binary(try_to_be, lhs.as_ref(), op.to_owned(), rhs.as_ref(), *group),
+            ast::expressions::Expression::Unary { ops, expression } => {
+                self.resolve_unary(try_to_be, ops, expression)
+            }
             e => todo!("Expression::{}", Into::<&'static str>::into(e)),
         };
         Infoed {
@@ -760,7 +764,77 @@ impl<'a> ResolutionEnv<'a> {
                     )
                 }
             }
-            _ => todo!("Expression::Assignement/handle wrong lhs: Expression::{}", Into::<&'static str>::into(call)),
+            _ => todo!(
+                "Expression::Assignement/handle wrong lhs: Expression::{}",
+                Into::<&'static str>::into(call)
+            ),
         }
+    }
+
+    fn resolve_unary(
+        &mut self,
+        try_to_be: Option<TypeId>,
+        ops: &[Spanned<Operation>],
+        expression: &Spanned<ast::expressions::Expression>,
+    ) -> (TypeId, fir::Expression) {
+        use FoldWhile::*;
+        let Infoed { inner, info, span } = ops
+            .iter()
+            .fold_while(
+                self.resolve_expression(None, &expression.0, expression.1),
+                |expr, op| {
+                    let Infoed { inner, info, span } = &expr;
+                    let get_as_primitive = self
+                        .resolver
+                        .type_registery
+                        .borrow()
+                        .get_as_primitive(*info);
+                    match (op.0, get_as_primitive) {
+                        (
+                            Operation::Substraction,
+                            Some((PrimitiveType::Integer(true, _) | PrimitiveType::Float(_))),
+                        )
+                        | (Operation::NotBitwise, Some(PrimitiveType::Integer(_, _)))
+                        | (Operation::Not, Some(PrimitiveType::Boolean)) => Continue(Infoed {
+                            info: *info,
+                            span: SimpleSpan::new(op.1.start, span.end),
+                            inner: fir::Expression::Unary {
+                                op: *op,
+                                expression: Box::new(expr),
+                            },
+                        }),
+                        (_, _) => {
+                            let span = SimpleSpan::new(op.1.start, span.end);
+                            self.add_error(
+                                TypeResError::UnaryUnapplicable(*op, expr.as_spanned_info().into()),
+                                span,
+                            );
+                            Done(Infoed {
+                                info: self.resolver.register_type(Type::Error(
+                                    self.func_info.file_id,
+                                    span,
+                                    "Unary operation not applicable",
+                                )),
+                                span,
+                                inner: fir::Expression::Unary {
+                                    op: *op,
+                                    expression: Box::new(expr),
+                                },
+                            })
+                        }
+                    }
+                },
+            )
+            .into_inner();
+        (
+            self.resolver
+                .type_registery
+                .borrow()
+                .is_error(info)
+                .then(|| try_to_be)
+                .flatten()
+                .unwrap_or(info),
+            inner,
+        )
     }
 }

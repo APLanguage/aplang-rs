@@ -129,7 +129,7 @@ pub fn unary_parser<'a, EP, I: TokenInput<'a>>(
     expr_parser: EP,
 ) -> impl TokenParser<'a, I, Expression> + Clone
 where EP: TokenParser<'a, I, Expression> + Clone + 'a {
-    ops_parser!(Minus, Bang)
+    ops_parser!(Minus, Bang, Tilde)
         .map_with_span(Spanned)
         .repeated()
         .at_least(1)

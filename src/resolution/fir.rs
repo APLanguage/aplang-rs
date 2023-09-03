@@ -75,7 +75,7 @@ pub enum Expression {
         expression: Box<Infoed<Expression>>,
     },
     Unary {
-        ops: Box<[Spanned<Operation>]>,
+        op: Spanned<Operation>,
         expression: Box<Infoed<Expression>>,
     },
 }

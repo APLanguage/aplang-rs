@@ -10,6 +10,7 @@ use std::{ops::Range, path::Path};
 use crate::{
     parsing::{
         parsers::{expressions::expression_parser, file::File},
+        tokenizer::Operation,
         Spanned,
     },
     project::{
@@ -245,6 +246,31 @@ fn main() {
                                 ))
                         ).with_label(ariadne::Label::new((&input_name as &str, op.1.into_range()))
                         .with_color(op_color))
+                    },
+                    UnaryUnapplicable(Spanned(op, op_span), Spanned(ty, ty_span)) => {
+                        let op_color = colors.next();
+                        let ty_color = colors.next();
+                        let ty_str = workspace.type_registery.borrow().display_type(ty).fg(ty_color);
+                        let op_str = match op {
+                            Operation::Addition => "Plus",
+                            Operation::Substraction | Operation::Not |Operation::NotBitwise => "Negation",
+                            _ => Into::<&'static str>::into(op)
+                        }.fg(op_color);
+                        rep
+                        .with_message(format!("{} is not applicable for type `{}`", op_str, ty_str))
+                        .with_label(
+                            ariadne::Label::new((&input_name as &str, op_span.into_range()))
+                                .with_color(op_color)
+                                .with_message(format!("{op_str} of"))
+                        )
+                        .with_label(
+                            ariadne::Label::new((&input_name as &str, ty_span.into_range()))
+                                .with_color(ty_color)
+                                .with_message(format!(
+                                    "this type: {}",
+                                    ty_str
+                                ))
+                        )
                     },
                 }
                 .finish()

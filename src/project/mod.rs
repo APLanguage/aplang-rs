@@ -158,11 +158,11 @@ impl TypeRegistry {
                 Type::Ref(_) => todo!("Type::Ref"),
                 Type::OperationResult(_) => todo!("Type::OperationResult"),
                 Type::Unknown(_, _) => todo!("Type::Unknown"),
-                Type::Error(_, _, e) => "!<".to_owned() + e + ">!",
+                Type::Error(_, _, e) => "!<".to_owned() + e + ">!" + &format!("[{:?}]", type_id),
                 Type::Unit => todo!("Type::Unit"),
                 Type::Nothing => todo!("Type::Nothing"),
             },
-        ) + &format!("[{:?}]", type_id)
+        )
     }
     pub fn display_primitive_type(ty: PrimitiveType) -> &'static str {
         use PrimitiveType::*;
@@ -176,6 +176,13 @@ impl TypeRegistry {
             Boolean => "bool",
             Unit => "unit",
         }
+    }
+
+    pub fn is_error(&self, ty: TypeId) -> bool {
+        self.types
+            .get(ty)
+            .map(|t| matches!(t, Type::Error(_, _, _)))
+            .unwrap_or(false)
     }
 }
 
