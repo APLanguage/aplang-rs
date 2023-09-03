@@ -1,4 +1,5 @@
 use lasso::Spur;
+use strum_macros::IntoStaticStr;
 
 use crate::parsing::{
     parsers::number::NumberLiteralResult,
@@ -20,7 +21,7 @@ pub enum StringLiteral {
     Raw(Spur),
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, IntoStaticStr)]
 pub enum Expression {
     If {
         condition: Box<Spanned<Expression>>,

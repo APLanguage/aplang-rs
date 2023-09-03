@@ -1,3 +1,5 @@
+use strum_macros::IntoStaticStr;
+
 use crate::parsing::{
     ast::expressions::Expression,
     Spanned,
@@ -5,7 +7,7 @@ use crate::parsing::{
 
 use super::declarations::Declaration;
 
-#[derive(Debug)]
+#[derive(Debug, IntoStaticStr)]
 pub enum ControlFlow {
     If {
         condition: Expression,
@@ -20,7 +22,7 @@ pub enum ControlFlow {
     Break,
 }
 
-#[derive(Debug)]
+#[derive(Debug, IntoStaticStr)]
 pub enum Statement {
     ControlFlow(ControlFlow),
     Declaration(Declaration),

@@ -10,6 +10,7 @@ use super::ParsedType;
 use chumsky::span::SimpleSpan;
 use itertools::Either;
 use lasso::Spur;
+use strum_macros::IntoStaticStr;
 use traversal::DftLongestPaths;
 
 type NameTypeTuple = (Spanned<Spur>, Infoed<ParsedType>);
@@ -105,7 +106,7 @@ pub struct Variable {
     pub expression: Spanned<Expression>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, IntoStaticStr)]
 pub enum Declaration {
     Variable(Variable),
     Function(Function),

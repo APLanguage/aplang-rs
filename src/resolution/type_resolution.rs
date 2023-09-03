@@ -81,7 +81,12 @@ pub enum TypeResError {
     VariableNotFound(Spanned<Spur>, Option<TypeId>),
     FieldNotFound(Spanned<(DependencyId, StructId)>, Spanned<Spur>),
     TypesAreNotMatching(Spanned<TypeId>, Spanned<TypeId>),
-    SignNotMatching(Spanned<(bool, IntegerWidth)>, OperationGroup, Spanned<Operation>, Spanned<(bool, IntegerWidth)>),
+    SignNotMatching(
+        Spanned<(bool, IntegerWidth)>,
+        OperationGroup,
+        Spanned<Operation>,
+        Spanned<(bool, IntegerWidth)>,
+    ),
 }
 
 struct ResolutionEnv<'a> {
@@ -132,9 +137,8 @@ impl<'a> ResolutionEnv<'a> {
             ast::statements::Statement::Expression(expr) => {
                 fir::Statement::Expression(self.resolve_expression(None, expr, *span))
             }
-            ast::statements::Statement::ControlFlow(_) => todo!("Statement::ControlFlow"),
             ast::statements::Statement::Declaration(delr) => self.resolve_declaration(delr),
-            ast::statements::Statement::None => todo!("Statement::None"),
+            stmt => todo!("Statement::{}", Into::<&'static str>::into(stmt)),
         }
     }
 
@@ -153,13 +157,6 @@ impl<'a> ResolutionEnv<'a> {
             ast::expressions::Expression::Call(call_kind) => {
                 self.resolve_call_kind(span, try_to_be, call_kind)
             }
-
-            ast::expressions::Expression::Unary { ops, expression } => todo!("Expression::Unary"),
-            ast::expressions::Expression::If {
-                condition,
-                then,
-                other,
-            } => todo!("Expression::If"),
             ast::expressions::Expression::CallChain { expression, calls } => {
                 self.resolve_call_chain(expression, calls)
             }
@@ -179,7 +176,7 @@ impl<'a> ResolutionEnv<'a> {
                 rhs,
                 group,
             } => self.resolve_binary(try_to_be, lhs.as_ref(), op.to_owned(), rhs.as_ref(), *group),
-            // _ => todo!(),
+            e => todo!("Expression::{}", Into::<&'static str>::into(e)),
         };
         Infoed {
             inner: expr,
@@ -312,7 +309,10 @@ impl<'a> ResolutionEnv<'a> {
                         fir::Expression::Call(Spanned(fir::CallKind::Variable(target), span)),
                     )
                 } else {
-                    self.add_error(TypeResError::VariableNotFound(name.to_owned(), try_to_be), span);
+                    self.add_error(
+                        TypeResError::VariableNotFound(name.to_owned(), try_to_be),
+                        span,
+                    );
                     (
                         self.resolver
                             .type_registery
@@ -617,7 +617,13 @@ impl<'a> ResolutionEnv<'a> {
                 _,
                 (Some(PrimitiveType::Float(w1)), Some(PrimitiveType::Float(w2))),
             ) => self.resolve_primitive(PrimitiveType::Float(w1.max(w2))),
-            _ => todo!("resolve_binary/other ops"),
+            (_, _, (Some(lhs), Some(rhs))) => todo!(
+                "resolve_binary/other ops: {}, {}, PrimitiveType::{} and PrimitiveType::{}",
+                group,
+                op.0,
+                lhs,
+                rhs
+            ),
         };
         (
             ty,
@@ -754,7 +760,7 @@ impl<'a> ResolutionEnv<'a> {
                     )
                 }
             }
-            _ => todo!("Expression::Assignement/handle wrong lhs"),
+            _ => todo!("Expression::Assignement/handle wrong lhs: Expression::{}", Into::<&'static str>::into(call)),
         }
     }
 }

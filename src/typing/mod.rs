@@ -5,6 +5,7 @@ use std::num::NonZeroUsize;
 use chumsky::span::SimpleSpan;
 use lasso::Spur;
 use slotmap::new_key_type;
+use strum_macros::Display;
 
 use crate::{
     parsing::{Spanned, parsers::number::LiteralWidth},
@@ -130,7 +131,7 @@ impl From<LiteralWidth> for FloatWidth {
     }
 }
 
-#[derive(Debug, PartialEq, Clone, Copy, Eq, Hash)]
+#[derive(Debug, PartialEq, Clone, Copy, Eq, Hash, Display)]
 pub enum PrimitiveType {
     String,
     Integer(bool, IntegerWidth),
