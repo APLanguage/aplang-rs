@@ -1,3 +1,4 @@
+use either::Either;
 use lasso::Spur;
 use slotmap::{new_key_type, SlotMap};
 
@@ -33,7 +34,7 @@ pub enum CallKind {
     Variable(VariableType),
     Function {
         dependency_id: DependencyId,
-        fn_id: FunctionId,
+        f_or_s_id: Either<FunctionId, StructId>,
         parameters: Box<[Infoed<Expression>]>,
     },
     Unresolved,

@@ -23,7 +23,7 @@ use crate::{
 };
 use ariadne::ReportBuilder;
 use chumsky::{
-    error::RichReason, prelude::Rich, primitive::end, span::SimpleSpan, ParseResult, Parser,
+    error::RichReason, prelude::Rich, primitive::end, ParseResult, Parser,
 };
 use itertools::Itertools;
 use lasso::Rodeo;
@@ -126,7 +126,7 @@ fn main() {
                 use TypeResError::*;
                 let mut colors = ariadne::ColorGenerator::new();
                 match err {
-                    FunctionNotFound(Spanned(name, span), params) => {
+                    FunctionNotFound(Spanned(_name, span), params) => {
                         let params = params
                             .into_iter()
                             .map(|ty_id| {
@@ -154,7 +154,7 @@ fn main() {
                         }
                         rep
                     }
-                    VariableNotFound(Spanned(name, span)) => {
+                    VariableNotFound(Spanned(_name, span)) => {
                         rep.with_message("Variable not found").with_label(
                             ariadne::Label::new((&input_name as &str, span.into_range()))
                                 .with_color(colors.next()),

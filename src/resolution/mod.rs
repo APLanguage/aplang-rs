@@ -1,6 +1,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use either::Either::{self, Left, Right};
 use lasso::Spur;
 
 use crate::parsing::ast::ParsedType;
@@ -164,8 +165,93 @@ impl<'a> FileScopedNameResolver<'a> {
         self.type_registery.borrow_mut().register_type(ty)
     }
 
-    fn resolve_fn(
-        &self,
+    fn resolve_struct(
+        &'a self,
+        identifier: Spur,
+    ) -> impl Iterator<Item = (DependencyId, StructId)> + 'a {
+        self.resolve_struct_in_file(identifier)
+            .chain(self.resolve_struct_in_uses(identifier))
+    }
+
+    fn resolve_func(
+        &'a self,
+        identifier: Spur,
+    ) -> impl Iterator<Item = (DependencyId, FunctionId)> + 'a {
+        self.resolve_func_in_file(identifier)
+            .chain(self.resolve_func_in_uses(identifier))
+    }
+
+    fn resolve_struct_in_file(
+        &'a self,
+        identifier: Spur,
+    ) -> impl Iterator<Item = (DependencyId, StructId)> + 'a {
+        let scopes = self
+            .dependencies
+            .get_dependency_scopes(self.dependency_id)
+            .expect("Dependency should exist");
+        scopes
+            .scope_children_by_name(self.scope_id, identifier)
+            .into_iter()
+            .flatten()
+            .filter_map(|scope_id| {
+                scopes
+                    .scope_as_declaration(scope_id)
+                    .and_then(|(_name, dec_id)| {
+                        self.dependencies
+                            .get_dependency(self.dependency_id)?
+                            .project
+                            .pool
+                            .declaration_id_as_struct(dec_id)
+                            .map(|strct_id| (self.dependency_id, strct_id))
+                    })
+            })
+    }
+
+    fn resolve_struct_in_uses(
+        &'a self,
+        identifier: Spur,
+    ) -> impl Iterator<Item = (DependencyId, StructId)> + 'a {
+        self.resolved_uses
+            .find(identifier)
+            .filter_map(|(dep, sp_id)| {
+                let project = &self.dependencies.get_dependency(dep)?.project;
+                Some((
+                    dep,
+                    project
+                        .pool
+                        .declaration_id_as_struct(project.scopes.scope_as_declaration(sp_id)?.1)?,
+                ))
+            })
+    }
+
+    fn resolve_func_in_file(
+        &'a self,
+        identifier: Spur,
+    ) -> impl Iterator<Item = (DependencyId, FunctionId)> + 'a {
+        let scopes = self
+            .dependencies
+            .get_dependency_scopes(self.dependency_id)
+            .expect("Dependency should exist");
+        scopes
+            .scope_children_by_name(self.scope_id, identifier)
+            .into_iter()
+            .flatten()
+            .filter_map(|scope_id| {
+                scopes
+                    .scope_as_declaration(scope_id)
+                    .and_then(|(_name, dec_id)| {
+                        self.dependencies
+                            .get_dependency(self.dependency_id)?
+                            .project
+                            .pool
+                            .declaration_id_as_func(dec_id)
+                            .map(|func_id| (self.dependency_id, func_id))
+                    })
+            })
+    }
+
+    fn resolve_func_in_uses(
+        &'a self,
         identifier: Spur,
     ) -> impl Iterator<Item = (DependencyId, FunctionId)> + 'a {
         self.resolved_uses
@@ -181,20 +267,53 @@ impl<'a> FileScopedNameResolver<'a> {
             })
     }
 
-    fn resolve_struct(
-        &self,
+    fn resolve_callable(
+        &'a self,
         identifier: Spur,
-    ) -> impl Iterator<Item = (DependencyId, StructId)> + 'a {
-        self.resolved_uses
-            .find(identifier)
-            .filter_map(|(dep, sp_id)| {
-                let project = &self.dependencies.get_dependency(dep)?.project;
-                Some((
-                    dep,
-                    project
-                        .pool
-                        .declaration_id_as_struct(project.scopes.scope_as_declaration(sp_id)?.1)?,
-                ))
+    ) -> impl Iterator<Item = (DependencyId, Either<FunctionId, StructId>)> + 'a {
+        let scopes = self
+            .dependencies
+            .get_dependency_scopes(self.dependency_id)
+            .expect("Dependency should exist");
+        scopes
+            .scope_children_by_name(self.scope_id, identifier)
+            .into_iter()
+            .flatten()
+            .filter_map(|scope_id| {
+                scopes
+                    .scope_as_declaration(scope_id)
+                    .and_then(|(_name, dec_id)| {
+                        let declaration_pool = &self
+                            .dependencies
+                            .get_dependency(self.dependency_id)?
+                            .project
+                            .pool;
+                        declaration_pool
+                            .declaration_id_as_func(dec_id)
+                            .map(|func_id| (self.dependency_id, Left(func_id)))
+                            .or_else(|| {
+                                declaration_pool
+                                    .declaration_id_as_struct(dec_id)
+                                    .map(|strct_id| (self.dependency_id, Right(strct_id)))
+                            })
+                    })
             })
+            .chain(
+                self.resolved_uses
+                    .find(identifier)
+                    .filter_map(|(dep, sp_id)| {
+                        let project = &self.dependencies.get_dependency(dep)?.project;
+                        Some((dep, {
+                            let dec_id = project.scopes.scope_as_declaration(sp_id)?.1;
+                            project
+                                .pool
+                                .declaration_id_as_func(dec_id)
+                                .map(Left)
+                                .or_else(|| {
+                                    project.pool.declaration_id_as_struct(dec_id).map(Right)
+                                })?
+                        }))
+                    }),
+            )
     }
 }

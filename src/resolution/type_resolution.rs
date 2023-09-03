@@ -5,6 +5,7 @@
 use std::{collections::HashMap, ops::ControlFlow, vec::Vec};
 
 use chumsky::span::{SimpleSpan, Span};
+use either::Either;
 use itertools::Itertools;
 use lasso::Spur;
 use slotmap::SlotMap;
@@ -26,7 +27,7 @@ use crate::{
 
 use super::{
     fir::{self, LocalVarId, VariableType},
-    name_resolution::ResolvedFunctionOutline,
+    name_resolution::{ResolvedFunctionOutline, ResolvedStructOutline},
     FileScopedNameResolver,
 };
 
@@ -302,8 +303,8 @@ impl<'a> ResolutionEnv<'a> {
                     .map(|Spanned(expr, span)| self.resolve_expression(None, expr, *span))
                     .collect_vec()
                     .into_boxed_slice();
-                let Some((dep, f_id, ret_ty)) = self
-                    .find_fn(
+                let Some((dep, f_or_s_id, ret_ty)) = self
+                    .find_callable(
                         identifier.0,
                         &parameters.iter().map(|i| i.info).collect_vec(),
                     )
@@ -342,7 +343,7 @@ impl<'a> ResolutionEnv<'a> {
                     fir::Expression::Call(Spanned(
                         fir::CallKind::Function {
                             dependency_id: dep,
-                            fn_id: f_id,
+                            f_or_s_id,
                             parameters,
                         },
                         span,
@@ -426,66 +427,95 @@ impl<'a> ResolutionEnv<'a> {
         )
     }
 
-    fn find_fn<'b: 'a>(
+    fn find_callable<'b: 'a>(
         &'a self,
         identifier: lasso::Spur,
         parameters: &'b [TypeId],
-    ) -> impl Iterator<Item = (DependencyId, FunctionId, Option<Result<TypeId, TypeId>>)> + 'a {
-        let iter = self
-            .resolver
-            .resolve_fn(identifier)
-            .filter_map(move |(dep, f_id)| {
-                let DeclarationInfo {
-                    decl: DeclarationResolutionStage { outline, .. },
-                    file_id,
-                } = self
-                    .resolver
-                    .dependencies
-                    .get_dependency(dep)?
-                    .project
-                    .pool
-                    .functions
-                    .get(f_id)?;
-                let Some(ResolvedFunctionOutline {
-                    parameters: resolved_parameters,
-                    ret_ty,
-                }) = outline
-                else {
-                    return None;
-                };
-                // println!(
-                //     "testing {:?}: ({}) vs ({})",
-                //     identifier.to_owned(),
-                //     parameters
-                //         .iter()
-                //         .map(|ty| self.resolver.type_registery.borrow().display_type(*ty))
-                //         .join(", "),
-                //     resolved_parameters
-                //         .iter()
-                //         .map(|ty| self
-                //             .resolver
-                //             .type_registery
-                //             .borrow()
-                //             .display_type(ty.unwrap_or_else(|t| t)))
-                //         .join(", ")
-                // );
-                if parameters.len() != resolved_parameters.len() {
-                    // println!("len not matched");
-                    return None;
-                }
-                if parameters
-                    .iter()
-                    .zip_eq(resolved_parameters.iter())
-                    .any(|(a, b)| match b.to_owned() {
-                        Ok(t) => *a != t,
-                        Err(_) => true,
-                    })
-                {
-                    // println!("types not matching");
-                    return None;
-                }
-                Some((dep, f_id, ret_ty.to_owned()))
-            });
+    ) -> impl Iterator<
+        Item = (
+            DependencyId,
+            Either<FunctionId, StructId>,
+            Option<Result<TypeId, TypeId>>,
+        ),
+    > + 'a {
+        let iter =
+            self.resolver
+                .resolve_callable(identifier)
+                .filter_map(move |(dep, f_or_s_id)| {
+                    let (resolved_parameters, ret_ty) = match f_or_s_id {
+                        Either::Left(f_id) => {
+                            let DeclarationInfo {
+                                decl: DeclarationResolutionStage { outline, .. },
+                                file_id: _,
+                            } = self
+                                .resolver
+                                .dependencies
+                                .get_dependency(dep)?
+                                .project
+                                .pool
+                                .functions
+                                .get(f_id)?;
+                            let Some(ResolvedFunctionOutline {
+                                parameters: resolved_parameters,
+                                ret_ty,
+                            }) = outline
+                            else {
+                                return None;
+                            };
+                            (resolved_parameters, ret_ty.to_owned())
+                        }
+                        Either::Right(s_id) => {
+                            let declaration_pool =
+                                &self.resolver.dependencies.get_dependency(dep)?.project.pool;
+                            let DeclarationInfo {
+                                decl: DeclarationResolutionStage { outline, .. },
+                                file_id: _,
+                            } = declaration_pool.structs.get(s_id)?;
+                            let Some(ResolvedStructOutline { fields }) = outline else {
+                                return None;
+                            };
+                            (
+                                fields,
+                                Some(Ok(declaration_pool
+                                    .type_id_of_declaration(
+                                        declaration_pool.declaration_id_of_struct(s_id).unwrap(),
+                                    )
+                                    .unwrap())),
+                            )
+                        }
+                    };
+
+                    // println!(
+                    //     "testing {:?}: ({}) vs ({})",
+                    //     identifier.to_owned(),
+                    //     parameters
+                    //         .iter()
+                    //         .map(|ty| self.resolver.type_registery.borrow().display_type(*ty))
+                    //         .join(", "),
+                    //     resolved_parameters
+                    //         .iter()
+                    //         .map(|ty| self
+                    //             .resolver
+                    //             .type_registery
+                    //             .borrow()
+                    //             .display_type(ty.unwrap_or_else(|t| t)))
+                    //         .join(", ")
+                    // );
+                    if parameters.len() != resolved_parameters.len() {
+                        return None;
+                    }
+                    if parameters
+                        .iter()
+                        .zip_eq(resolved_parameters.iter())
+                        .any(|(a, b)| match b.to_owned() {
+                            Ok(t) => *a != t,
+                            Err(_) => true,
+                        })
+                    {
+                        return None;
+                    }
+                    Some((dep, f_or_s_id, ret_ty))
+                });
         if parameters.iter().any(|type_id| {
             matches!(
                 self.resolver.type_registery.borrow().get(*type_id),
