@@ -170,7 +170,7 @@ impl<'a> ResolutionEnv<'a> {
                 call,
                 op,
                 expression,
-            } => self.resolve_assignement(call, *op, expression),
+            } => self.resolve_assignement(try_to_be, call, *op, expression),
             ast::expressions::Expression::Binary {
                 lhs,
                 op,
@@ -709,6 +709,7 @@ impl<'a> ResolutionEnv<'a> {
     }
     fn resolve_assignement(
         &mut self,
+        try_to_be: Option<TypeId>,
         call: &Spanned<ast::expressions::Expression>,
         op: Spanned<Operation>,
         expression: &Spanned<ast::expressions::Expression>,
@@ -722,7 +723,33 @@ impl<'a> ResolutionEnv<'a> {
             }
             ast::expressions::Expression::Call(CallKind::Identifier(Spanned(name, var_span))) => {
                 let Some((ty, var_ty)) = self.find_var(*name) else {
-                    todo!("Expression::Assignement/Expression::Call/not found")
+                    self.add_error(
+                        TypeResError::VariableNotFound(Spanned(*name, *var_span), try_to_be),
+                        *var_span,
+                    );
+                    let Infoed {
+                        inner: fir_expr,
+                        info: expr_ty,
+                        ..
+                    } = self.resolve_expression(try_to_be, expr, *expr_span);
+                    return (
+                        try_to_be.unwrap_or_else(|| {
+                            self.resolver.register_type(Type::Error(
+                                self.func_info.file_id,
+                                *var_span,
+                                "variable not found",
+                            ))
+                        }),
+                        fir::Expression::Assignement {
+                            call: Spanned(Err(()), *call_span), // should probably make it return a spur or something
+                            op: Spanned(op, op_span),
+                            expression: Box::new(Infoed {
+                                inner: fir_expr,
+                                info: expr_ty,
+                                span: *expr_span,
+                            }),
+                        },
+                    );
                 };
                 let Infoed {
                     inner: fir_expr,
@@ -740,7 +767,7 @@ impl<'a> ResolutionEnv<'a> {
                     (
                         ty,
                         fir::Expression::Assignement {
-                            call: Spanned(AssignableTarget::Var(ty, var_ty), *call_span),
+                            call: Spanned(Ok(AssignableTarget::Var(ty, var_ty)), *call_span),
                             op: Spanned(op, op_span),
                             expression: Box::new(Infoed {
                                 inner: fir_expr,
@@ -753,7 +780,7 @@ impl<'a> ResolutionEnv<'a> {
                     (
                         expr_ty,
                         fir::Expression::Assignement {
-                            call: Spanned(AssignableTarget::Var(ty, var_ty), *call_span),
+                            call: Spanned(Ok(AssignableTarget::Var(ty, var_ty)), *call_span),
                             op: Spanned(op, op_span),
                             expression: Box::new(Infoed {
                                 inner: fir_expr,

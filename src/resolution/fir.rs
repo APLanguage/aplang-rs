@@ -70,7 +70,7 @@ pub enum Expression {
         group: OperationGroup,
     },
     Assignement {
-        call: Spanned<AssignableTarget>,
+        call: Spanned<Result<AssignableTarget, ()>>,
         op: Spanned<Operation>,
         expression: Box<Infoed<Expression>>,
     },
