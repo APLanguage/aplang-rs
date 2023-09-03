@@ -371,7 +371,7 @@ pub struct Project {
     pub scopes: Scopes,
 }
 impl Project {
-    pub fn struct_path<'a>(&'a self, struct_id: StructId) -> impl Iterator<Item = Spur> + 'a {
+    pub fn struct_path(&self, struct_id: StructId) -> impl Iterator<Item = Spur> + '_ {
         let mut scope_id = self
             .scopes
             .scope_of_declaration(self.pool.declaration_id_of_struct(struct_id).unwrap())

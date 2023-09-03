@@ -134,9 +134,7 @@ fn main() {
                             })
                             .collect_vec();
                         let mut rep = rep
-                            .with_message(
-                                "Couldn't find function matching parameter types",
-                            )
+                            .with_message("Couldn't find function matching parameter types")
                             .with_label(
                                 ariadne::Label::new((&input_name as &str, span.into_range()))
                                     .with_color(colors.next()),
@@ -176,26 +174,33 @@ fn main() {
                         ),
                     FieldNotFound(
                         Spanned((dep, struct_id), base_span),
-                        Spanned(_name, name_span),
+                        Spanned(name, name_span),
                     ) => {
                         let dep = workspace.dependencies.get_dependency(dep).unwrap();
-                        rep.with_message("Field not found of struct")
-                            .with_label(
-                                ariadne::Label::new((&input_name as &str, base_span.into_range()))
-                                    .with_color(colors.next())
-                                    .with_message(format!(
-                                        "this returns struct: ({}) {}",
-                                        rodeo.resolve(&dep.name),
-                                        dep.project
-                                            .struct_path(struct_id)
-                                            .map(|s| rodeo.resolve(&s))
-                                            .join("::"),
-                                    )),
-                            )
-                            .with_label(
-                                ariadne::Label::new((&input_name as &str, name_span.into_range()))
-                                    .with_color(colors.next()),
-                            )
+                        let project_name = rodeo.resolve(&dep.name);
+                        let struct_path = &dep
+                            .project
+                            .struct_path(struct_id)
+                            .map(|s| rodeo.resolve(&s))
+                            .join("::");
+                        rep.with_message(format!(
+                            "No field `{}` found for struct ({}) {}",
+                            rodeo.resolve(&name),
+                            project_name,
+                            struct_path,
+                        ))
+                        .with_label(
+                            ariadne::Label::new((&input_name as &str, base_span.into_range()))
+                                .with_color(colors.next())
+                                .with_message(format!(
+                                    "this returns struct: ({}) {}",
+                                    project_name, struct_path,
+                                )),
+                        )
+                        .with_label(
+                            ariadne::Label::new((&input_name as &str, name_span.into_range()))
+                                .with_color(colors.next()).with_message("Cannot find this field"),
+                        )
                     }
                 }
                 .finish()
