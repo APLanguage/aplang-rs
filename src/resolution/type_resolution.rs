@@ -89,6 +89,7 @@ pub enum TypeResError {
     ),
     UnaryUnapplicable(Spanned<Operation>, Spanned<TypeId>),
     FunctionReturnProblem(FunctionReturnProblem, Spanned<TypeId>),
+    ConditionNotBool(Spanned<TypeId>),
 }
 #[derive(Debug)]
 pub enum FunctionReturnProblem {
@@ -882,14 +883,44 @@ impl<'a> ResolutionEnv<'a> {
         match cf {
             ast::statements::ControlFlow::Break => fir::ControlFlow::Break,
             ast::statements::ControlFlow::If {
-                condition,
+                condition: Spanned(expr, expr_span),
                 then,
                 other,
-            } => todo!(),
+            } => {
+                let bool_ty = self.resolve_primitive(PrimitiveType::Boolean);
+                let condition = self.resolve_expression(Some(bool_ty), expr, *expr_span);
+                if condition.info != bool_ty {
+                    self.add_error(
+                        TypeResError::ConditionNotBool(condition.as_spanned_cloned_info()),
+                        span,
+                    );
+                }
+                let then = self.resolve_statements(then);
+                let other = other.as_ref().map(|other| self.resolve_statements(other));
+                fir::ControlFlow::If {
+                    condition,
+                    then,
+                    other,
+                }
+            }
             ast::statements::ControlFlow::While {
-                condition,
+                condition: Spanned(expr, expr_span),
                 statements,
-            } => todo!(),
+            } => {
+                let bool_ty = self.resolve_primitive(PrimitiveType::Boolean);
+                let condition = self.resolve_expression(Some(bool_ty), expr, *expr_span);
+                if condition.info != bool_ty {
+                    self.add_error(
+                        TypeResError::ConditionNotBool(condition.as_spanned_cloned_info()),
+                        span,
+                    );
+                }
+                let statements = self.resolve_statements(statements);
+                fir::ControlFlow::While {
+                    condition,
+                    statements,
+                }
+            }
             ast::statements::ControlFlow::Return(expr_opt) => {
                 let fir_expr = expr_opt.as_ref().map(|Spanned(expr, expr_span)| {
                     self.resolve_expression(
@@ -945,5 +976,15 @@ impl<'a> ResolutionEnv<'a> {
             }
             _ => todo!("ControlFlow::{}", Into::<&'static str>::into(cf)),
         }
+    }
+
+    fn resolve_statements(
+        &mut self,
+        then: &[Spanned<ast::statements::Statement>],
+    ) -> Box<[Spanned<fir::Statement>]> {
+        then.iter()
+            .map(|stmt| Spanned(self.resolve_statement(stmt), stmt.1))
+            .collect_vec()
+            .into_boxed_slice()
     }
 }

@@ -30,4 +30,6 @@ fn main() {
     val person = Person(r"Amejonah", 42u8)
     test_person(person)
     val test = person.a
+    if(1u16) while(1u16) {}
+    while(1u16) {}
 }

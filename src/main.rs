@@ -293,6 +293,19 @@ fn main() {
                                 ).with_note(format!("Either add an expression, or make the function return `{unit_ty_str}`.")),
                         }
                     },
+                    ConditionNotBool(Spanned(ty, ty_span)) => {
+                        let ty_color = colors.next();
+                        let ty_str = workspace.display_type(&rodeo, ty).fg(ty_color);
+                        let bool_ty_color = colors.next();
+                        let bool_ty_str = "bool".fg(bool_ty_color);
+                        
+                        rep
+                            .with_message(format!("Expected condition of type `{bool_ty_str}` but got `{ty_str}`."))
+                            .with_label(ariadne::Label::new((&input_name as &str, ty_span.into_range()))
+                                .with_color(ty_color)
+                                .with_message(format!("this condition is of type `{ty_str}`"))
+                            )
+                    },
                 }
                 .finish()
                 .print((&input_name as &str, ariadne::Source::from(file.src())))

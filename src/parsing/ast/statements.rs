@@ -10,12 +10,12 @@ use super::declarations::Declaration;
 #[derive(Debug, IntoStaticStr)]
 pub enum ControlFlow {
     If {
-        condition: Expression,
-        then: Box<Spanned<Statement>>,
-        other: Option<Box<Spanned<Statement>>>,
+        condition: Spanned<Expression>,
+        then: Box<[Spanned<Statement>]>,
+        other: Option<Box<[Spanned<Statement>]>>,
     },
     While {
-        condition: Expression,
+        condition: Spanned<Expression>,
         statements: Box<[Spanned<Statement>]>,
     },
     Return(Option<Spanned<Expression>>),

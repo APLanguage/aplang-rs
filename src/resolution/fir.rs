@@ -83,13 +83,13 @@ pub enum Expression {
 #[derive(Debug)]
 pub enum ControlFlow {
     If {
-        condition: Expression,
-        then: Box<Statement>,
-        other: Option<Box<Statement>>,
+        condition: Infoed<Expression>,
+        then: Box<[Spanned<Statement>]>,
+        other: Option<Box<[Spanned<Statement>]>>,
     },
     While {
-        condition: Expression,
-        statements: Box<[Statement]>,
+        condition: Infoed<Expression>,
+        statements: Box<[Spanned<Statement>]>,
     },
     Return(Option<Infoed<Expression>>),
     Break,

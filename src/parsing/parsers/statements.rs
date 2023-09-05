@@ -18,21 +18,50 @@ where
     SP: TokenParser<'a, I, Spanned<Statement>> + Clone + 'a, {
     keyword(Identifier::If)
         .ignore_then(
-            expression_parser().delimited_by(just(Token::ParenOpen), just(Token::ParenClosed)),
+            expression_parser()
+                .spanned()
+                .paddedln()
+                .delimited_by(just(Token::ParenOpen), just(Token::ParenClosed)),
         )
-        .then(stmt_parser.clone().paddedln())
+        .then(choice((
+            stmt_parser.clone()
+                .paddedln()
+                .repeated()
+                .collect_boxed_slice()
+                .delimited_by(just(Token::BraceOpen), just(Token::BraceClosed))
+                .labelled("fn-stmts")
+                .boxed(),
+            stmt_parser.clone()
+                .paddedln()
+                .repeated()
+                .exactly(1)
+                .collect_boxed_slice(),
+        )))
         .boxed()
         .then(
             keyword(Identifier::Else)
                 .paddedln()
-                .ignore_then(stmt_parser)
+                .ignore_then(choice((
+                    stmt_parser.clone()
+                        .paddedln()
+                        .repeated()
+                        .collect_boxed_slice()
+                        .delimited_by(just(Token::BraceOpen), just(Token::BraceClosed))
+                        .labelled("fn-stmts")
+                        .boxed(),
+                    stmt_parser
+                        .paddedln()
+                        .repeated()
+                        .exactly(1)
+                        .collect_boxed_slice(),
+                )))
                 .or_not()
                 .boxed(),
         )
         .map(|((condition, then), other)| ControlFlow::If {
             condition,
-            then: Box::new(then),
-            other: other.map(Box::new),
+            then,
+            other,
         })
         .labelled("if")
         .boxed()
@@ -45,23 +74,23 @@ where
     keyword(Identifier::While)
         .ignore_then(
             expression_parser()
+                .spanned()
                 .paddedln()
                 .delimited_by(just(Token::ParenOpen), just(Token::ParenClosed)),
         )
         .then(choice((
-            stmt_parser
-                .clone()
-                .paddedln()
-                .repeated()
-                .exactly(1)
-                .collect_boxed_slice(),
-            stmt_parser
+            stmt_parser.clone()
                 .paddedln()
                 .repeated()
                 .collect_boxed_slice()
                 .delimited_by(just(Token::BraceOpen), just(Token::BraceClosed))
                 .labelled("fn-stmts")
                 .boxed(),
+            stmt_parser
+                .paddedln()
+                .repeated()
+                .exactly(1)
+                .collect_boxed_slice(),
         )))
         .map(|(condition, statements)| ControlFlow::While {
             condition,
