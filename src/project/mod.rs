@@ -17,7 +17,8 @@ use crate::{
 };
 use chumsky::span::SimpleSpan;
 use either::Either;
-use lasso::Spur;
+use itertools::Itertools;
+use lasso::{Spur, Rodeo};
 use slotmap::{new_key_type, SlotMap};
 
 use crate::parsing::ast::declarations::{Function, Struct, UseDeclaration};
@@ -140,12 +141,21 @@ impl TypeRegistry {
             .unwrap()
     }
 
-    pub fn display_type(&self, type_id: TypeId) -> String {
+    pub fn display_type(&self, rodeo: &Rodeo, dependencies: &Dependencies, type_id: TypeId) -> String {
         self.get(type_id).map_or_else(
             || "?".to_string(),
             |ty| match ty {
                 Type::PrimitiveType(ty) => Self::display_primitive_type(*ty).to_string(),
-                Type::Data(_, _) => todo!("Type::Data"),
+                Type::Data(dep, struct_id) => {
+                    let dependency_info = dependencies.get_dependency(*dep).unwrap();
+                    let project_name = rodeo.resolve(&dependency_info.name);
+                        let struct_path = &dependency_info
+                            .project
+                            .struct_path(*struct_id)
+                            .map(|s| rodeo.resolve(&s))
+                            .join("::");
+                    format!("({project_name}) {struct_path}")
+                },
                 Type::Array { ty: _, size: _ } => todo!("Type::Array"),
                 Type::Function {
                     parameters: _,
@@ -251,6 +261,10 @@ impl Workspace {
             dependency_id,
             file_id,
         )
+    }
+
+    pub fn display_type(&self, rodeo: &Rodeo, ty: TypeId) -> String {
+        self.type_registery.borrow().display_type(rodeo, &self.dependencies, ty)
     }
 }
 

@@ -91,7 +91,7 @@ pub enum ControlFlow {
         condition: Expression,
         statements: Box<[Statement]>,
     },
-    Return(Option<Spanned<Expression>>),
+    Return(Option<Infoed<Expression>>),
     Break,
 }
 

@@ -13,24 +13,46 @@ pub struct Infoed<T: Infoable> {
     pub span: SimpleSpan,
 }
 
-impl <T: Infoable> Infoed<T> {
+impl<T: Infoable> Infoed<T> {
     pub fn into_spanned_inner(self) -> Spanned<T> {
         self.into()
     }
 
     pub fn into_spanned_info(self) -> Spanned<T::Info> {
-        let Infoed { inner: _, info, span } = self;
+        let Infoed {
+            inner: _,
+            info,
+            span,
+        } = self;
         Spanned(info, span)
     }
 
     pub fn as_spanned_inner(&self) -> Spanned<&T> {
-        let Infoed { inner, info: _, span } = self;
+        let Infoed {
+            inner,
+            info: _,
+            span,
+        } = self;
         Spanned(inner, *span)
     }
 
     pub fn as_spanned_info(&self) -> Spanned<&T::Info> {
-        let Infoed { inner: _, info, span } = self;
+        let Infoed {
+            inner: _,
+            info,
+            span,
+        } = self;
         Spanned(info, *span)
+    }
+
+    pub fn as_spanned_cloned_info(&self) -> Spanned<T::Info>
+    where T::Info: ToOwned<Owned = T::Info> {
+        let Infoed {
+            inner: _,
+            info,
+            span,
+        } = self;
+        Spanned(info.to_owned(), *span)
     }
 }
 
@@ -60,6 +82,10 @@ impl<T> Spanned<T> {
         Spanned(mapping(&self.0), self.1)
     }
 
+    pub fn map_to<R>(&self, to: R) -> Spanned<R> {
+        Spanned(to, self.1)
+    }
+
     pub fn map_move<R, F>(self, mapping: F) -> Spanned<R>
     where F: Fn(T) -> R {
         Spanned(mapping(self.0), self.1)
@@ -71,14 +97,15 @@ impl<T> Spanned<T> {
     }
 }
 
-impl<T: Infoable> From<Infoed<T>> for Spanned<T> {
-    fn from(val: Infoed<T>) -> Self {
-        Spanned(val.inner, val.span)
+impl<T> Spanned<&T> {
+    pub fn clone_inner(&self) -> Spanned<T>
+    where T: ToOwned<Owned = T> {
+        Spanned(self.0.to_owned(), self.1)
     }
 }
 
-impl<T: ToOwned<Owned = T>> From<Spanned<&T>> for Spanned<T> {
-    fn from(val: Spanned<&T>) -> Self {
-        Spanned(val.0.to_owned(), val.1)
+impl<T: Infoable> From<Infoed<T>> for Spanned<T> {
+    fn from(val: Infoed<T>) -> Self {
+        Spanned(val.inner, val.span)
     }
 }

@@ -131,7 +131,7 @@ fn main() {
                             .into_iter()
                             .map(|ty_id| {
                                 ty_id.map_new(|ty_id| {
-                                    workspace.type_registery.borrow().display_type(*ty_id)
+                                    workspace.display_type(&rodeo, *ty_id)
                                 })
                             })
                             .collect_vec();
@@ -159,7 +159,7 @@ fn main() {
                                 .with_color(color),
                         );
                         if let Some(ty) = try_to_be {
-                            rep.add_note(format!("The type of the variable needs to be a `{}`.", workspace.type_registery.borrow().display_type(ty).fg(color)))
+                            rep.add_note(format!("The type of the variable needs to be a `{}`.", workspace.display_type(&rodeo, ty).fg(color)))
                         }
                         rep
                     }
@@ -171,7 +171,7 @@ fn main() {
                                 .with_color(color)
                                 .with_message(format!(
                                     "this is of type: {}",
-                                    workspace.type_registery.borrow().display_type(a.0).fg(color)
+                                    workspace.display_type(&rodeo, a.0).fg(color)
                                 ))
                         })
                         .with_label({
@@ -180,7 +180,7 @@ fn main() {
                                 .with_color(color)
                                 .with_message(format!(
                                     "this is of type: {}",
-                                    workspace.type_registery.borrow().display_type(b.0).fg(color)
+                                    workspace.display_type(&rodeo, b.0).fg(color)
                                 ))
                         }),
                     FieldNotFound(
@@ -250,14 +250,14 @@ fn main() {
                     UnaryUnapplicable(Spanned(op, op_span), Spanned(ty, ty_span)) => {
                         let op_color = colors.next();
                         let ty_color = colors.next();
-                        let ty_str = workspace.type_registery.borrow().display_type(ty).fg(ty_color);
+                        let ty_str = workspace.display_type(&rodeo, ty).fg(ty_color);
                         let op_str = match op {
                             Operation::Addition => "Plus",
                             Operation::Substraction | Operation::Not |Operation::NotBitwise => "Negation",
                             _ => Into::<&'static str>::into(op)
                         }.fg(op_color);
                         rep
-                        .with_message(format!("{} is not applicable for type `{}`", op_str, ty_str))
+                        .with_message(format!("{op_str} is not applicable for type `{ty_str}`"))
                         .with_label(
                             ariadne::Label::new((&input_name as &str, op_span.into_range()))
                                 .with_color(op_color)
@@ -266,11 +266,32 @@ fn main() {
                         .with_label(
                             ariadne::Label::new((&input_name as &str, ty_span.into_range()))
                                 .with_color(ty_color)
-                                .with_message(format!(
-                                    "this type: {}",
-                                    ty_str
-                                ))
+                                .with_message(format!("type `{ty_str}`"))
                         )
+                    },
+                    FunctionReturnProblem(problem, Spanned(ty, ty_span)) => {
+                        use resolution::type_resolution::FunctionReturnProblem::*;
+                        let ty_color = colors.next();
+                        let unit_ty_color = colors.next();
+                        let ret_color = colors.next();
+                        let ty_str = workspace.display_type(&rodeo, ty).fg(ty_color);
+                        let unit_ty_str = "unit".fg(unit_ty_color);
+                        match problem {
+                            ExpectedEmptyReturn => rep.with_message(format!("Expected no expression for the return statement as the function returns `{unit_ty_str}`, but got an expression returning `{ty_str}`" ))
+                                .with_label(ariadne::Label::new((&input_name as &str, ty_span.into_range()))
+                                    .with_color(ty_color)
+                                    .with_message(format!("this expression returns a `{ty_str}`"))
+                                ).with_note(format!("Either remove the expression, or make the function return `{ty_str}`."))
+                                ,
+                            ExpectedAReturnExpr => rep.with_message(format!("Expected an expression for the return statement as the function returns `{ty_str}`."))
+                                .with_label(ariadne::Label::new((&input_name as &str, span.into_range()))
+                                    .with_color(ret_color)
+                                    .with_message("this return has no expression")
+                                ).with_label(ariadne::Label::new((&input_name as &str, ty_span.into_range()))
+                                    .with_color(ty_color)
+                                    .with_message(format!("this function returns `{ty_str}`"))
+                                ).with_note(format!("Either add an expression, or make the function return `{unit_ty_str}`.")),
+                        }
                     },
                 }
                 .finish()

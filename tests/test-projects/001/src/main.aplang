@@ -9,6 +9,18 @@ fn test_person(person: Person) {
     println(r##"Hello "## + person.name + r", age " + person.age)
 }
 
+fn new_newborn(name: str) -> Person {
+    return
+}
+
+fn test_non_empty_return(name: str) {
+    return 1u16
+}
+
+fn test_wrong_return(name: str) -> u8{
+    return 1u16
+}
+
 fn main() {
     var e = 2u16
     var c = 1u16

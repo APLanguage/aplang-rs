@@ -88,6 +88,12 @@ pub enum TypeResError {
         Spanned<(bool, IntegerWidth)>,
     ),
     UnaryUnapplicable(Spanned<Operation>, Spanned<TypeId>),
+    FunctionReturnProblem(FunctionReturnProblem, Spanned<TypeId>),
+}
+#[derive(Debug)]
+pub enum FunctionReturnProblem {
+    ExpectedEmptyReturn,
+    ExpectedAReturnExpr,
 }
 
 struct ResolutionEnv<'a> {
@@ -139,7 +145,10 @@ impl<'a> ResolutionEnv<'a> {
                 fir::Statement::Expression(self.resolve_expression(None, expr, *span))
             }
             ast::statements::Statement::Declaration(delr) => self.resolve_declaration(delr),
-            stmt => todo!("Statement::{}", Into::<&'static str>::into(stmt)),
+            ast::statements::Statement::None => fir::Statement::None,
+            ast::statements::Statement::ControlFlow(cf) => {
+                fir::Statement::ControlFlow(self.resolve_control_flow(cf, *span))
+            } // stmt => todo!("Statement::{}", Into::<&'static str>::into(stmt)),
         }
     }
 
@@ -351,7 +360,7 @@ impl<'a> ResolutionEnv<'a> {
                             identifier.to_owned(),
                             parameters
                                 .iter()
-                                .map(|t| t.as_spanned_info().into())
+                                .map(|t| t.as_spanned_cloned_info())
                                 .collect_vec(),
                         ),
                         span,
@@ -833,7 +842,7 @@ impl<'a> ResolutionEnv<'a> {
                         (_, _) => {
                             let span = SimpleSpan::new(op.1.start, span.end);
                             self.add_error(
-                                TypeResError::UnaryUnapplicable(*op, expr.as_spanned_info().into()),
+                                TypeResError::UnaryUnapplicable(*op, expr.as_spanned_cloned_info()),
                                 span,
                             );
                             Done(Infoed {
@@ -858,10 +867,83 @@ impl<'a> ResolutionEnv<'a> {
                 .type_registery
                 .borrow()
                 .is_error(info)
-                .then(|| try_to_be)
+                .then_some(try_to_be)
                 .flatten()
                 .unwrap_or(info),
             inner,
         )
+    }
+
+    fn resolve_control_flow(
+        &mut self,
+        cf: &ast::statements::ControlFlow,
+        span: SimpleSpan,
+    ) -> fir::ControlFlow {
+        match cf {
+            ast::statements::ControlFlow::Break => fir::ControlFlow::Break,
+            ast::statements::ControlFlow::If {
+                condition,
+                then,
+                other,
+            } => todo!(),
+            ast::statements::ControlFlow::While {
+                condition,
+                statements,
+            } => todo!(),
+            ast::statements::ControlFlow::Return(expr_opt) => {
+                let fir_expr = expr_opt.as_ref().map(|Spanned(expr, expr_span)| {
+                    self.resolve_expression(
+                        self.func_info_outline.ret_ty.and_then(Result::ok),
+                        expr,
+                        *expr_span,
+                    )
+                });
+                let spanned_func_ret = self.func_info.decl.ast.ty.as_ref();
+                match (
+                    self.func_info_outline.ret_ty,
+                    fir_expr.as_ref().map(Infoed::as_spanned_cloned_info),
+                ) {
+                    (None, None) => return fir::ControlFlow::Return(None),
+                    (None, Some(t)) => self.add_error(
+                        TypeResError::FunctionReturnProblem(
+                            FunctionReturnProblem::ExpectedEmptyReturn,
+                            t,
+                        ),
+                        span,
+                    ),
+                    (Some(Err(_)), Some(_) | None) => {
+                        /* do nothing, cuz an error has already been reported for a non-valid return type */
+                    }
+                    (Some(Ok(t)), None) => self.add_error(
+                        TypeResError::FunctionReturnProblem(
+                            FunctionReturnProblem::ExpectedAReturnExpr,
+                            spanned_func_ret
+                                .expect("BUG: It should be synced")
+                                .map_to(t),
+                        ),
+                        span,
+                    ),
+                    (Some(Ok(a)), Some(b)) => {
+                        if a != b.0 {
+                            self.add_error(
+                                TypeResError::TypesAreNotMatching(
+                                    self.func_info
+                                        .decl
+                                        .ast
+                                        .ty
+                                        .as_ref()
+                                        .expect("BUG: It should be synced")
+                                        .map_to(a),
+                                    b,
+                                ),
+                                span,
+                            );
+                        }
+                    }
+                }
+                fir::ControlFlow::Return(fir_expr)
+            }
+            _ => todo!("ControlFlow::{}", Into::<&'static str>::into(cf)),
+        }
     }
 }
