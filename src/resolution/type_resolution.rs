@@ -90,11 +90,25 @@ pub enum TypeResError {
     UnaryUnapplicable(Spanned<Operation>, Spanned<TypeId>),
     FunctionReturnProblem(FunctionReturnProblem, Spanned<TypeId>),
     ConditionNotBool(Spanned<TypeId>),
+    BinaryHandsNotPrimitive(
+        OperationGroup,
+        Spanned<Operation>,
+        BinaryHandsNotPrimitive,
+        Spanned<TypeId>,
+        Spanned<TypeId>,
+    ),
 }
 #[derive(Debug)]
 pub enum FunctionReturnProblem {
     ExpectedEmptyReturn,
     ExpectedAReturnExpr,
+}
+
+#[derive(Debug)]
+pub enum BinaryHandsNotPrimitive {
+    None,
+    Lhs,
+    Rhs,
 }
 
 struct ResolutionEnv<'a> {
@@ -149,7 +163,7 @@ impl<'a> ResolutionEnv<'a> {
             ast::statements::Statement::None => fir::Statement::None,
             ast::statements::Statement::ControlFlow(cf) => {
                 fir::Statement::ControlFlow(self.resolve_control_flow(cf, *span))
-            } // stmt => todo!("Statement::{}", Into::<&'static str>::into(stmt)),
+            }
         }
     }
 
@@ -190,6 +204,10 @@ impl<'a> ResolutionEnv<'a> {
             ast::expressions::Expression::Unary { ops, expression } => {
                 self.resolve_unary(try_to_be, ops, expression)
             }
+            ast::expressions::Expression::Bool(b) => (
+                self.resolve_primitive(PrimitiveType::Boolean),
+                fir::Expression::Bool(*b),
+            ),
             e => todo!("Expression::{}", Into::<&'static str>::into(e)),
         };
         Infoed {
@@ -596,11 +614,61 @@ impl<'a> ResolutionEnv<'a> {
             .type_registery
             .borrow()
             .get_as_primitive(rhs.info);
+        let span = (lhs.span.start..rhs.span.end).into();
+
         use OperationGroup::*;
         let ty = match (group, op.0, (lhs_get_as_primitive, rhs_get_as_primitive)) {
-            (_, _, (None, None)) => todo!("report being non-primitive"),
-            (_, _, (None, Some(_))) => todo!("report being rhs non-primitive"),
-            (_, _, (Some(_), None)) => todo!("report being lhs non-primitive"),
+            (_, _, (None, None)) => {
+                self.add_error(
+                    TypeResError::BinaryHandsNotPrimitive(
+                        group,
+                        op,
+                        BinaryHandsNotPrimitive::None,
+                        lhs.as_spanned_cloned_info(),
+                        rhs.as_spanned_cloned_info(),
+                    ),
+                    span,
+                );
+                try_to_be.unwrap_or_else(|| {
+                    self.resolver.register_type(Type::Error(
+                        self.func_info.file_id,
+                        span,
+                        "non primitive hands",
+                    ))
+                })
+            }
+            (_, _, (None, Some(_))) => {
+                self.add_error(
+                    TypeResError::BinaryHandsNotPrimitive(
+                        group,
+                        op,
+                        BinaryHandsNotPrimitive::Lhs,
+                        lhs.as_spanned_cloned_info(),
+                        rhs.as_spanned_cloned_info(),
+                    ),
+                    span,
+                );
+                try_to_be.unwrap_or_else(|| {
+                    self.resolver.register_type(Type::Error(
+                        self.func_info.file_id,
+                        span,
+                        "non primitive lhs",
+                    ))
+                })
+            }
+            (_, _, (Some(ty), None)) => {
+                self.add_error(
+                    TypeResError::BinaryHandsNotPrimitive(
+                        group,
+                        op,
+                        BinaryHandsNotPrimitive::Rhs,
+                        lhs.as_spanned_cloned_info(),
+                        rhs.as_spanned_cloned_info(),
+                    ),
+                    span,
+                );
+                try_to_be.unwrap_or_else(|| self.resolve_primitive(ty))
+            }
             (
                 Term,
                 Operation::Addition,
@@ -619,7 +687,7 @@ impl<'a> ResolutionEnv<'a> {
                             op,
                             Spanned((s2, w2), rhs.span),
                         ),
-                        (lhs.span.start..rhs.span.end).into(),
+                        span,
                     );
                     try_to_be.unwrap_or(lhs.info)
                 } else {
@@ -974,7 +1042,6 @@ impl<'a> ResolutionEnv<'a> {
                 }
                 fir::ControlFlow::Return(fir_expr)
             }
-            _ => todo!("ControlFlow::{}", Into::<&'static str>::into(cf)),
         }
     }
 

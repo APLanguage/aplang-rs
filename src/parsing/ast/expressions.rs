@@ -30,6 +30,7 @@ pub enum Expression {
     },
     Number(NumberLiteralResult),
     StringLiteral(StringLiteral),
+    Bool(bool),
     CallChain {
         expression: Box<Spanned<Expression>>,
         calls: Box<[Spanned<CallKind>]>,

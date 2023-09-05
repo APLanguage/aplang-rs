@@ -306,6 +306,31 @@ fn main() {
                                 .with_message(format!("this condition is of type `{ty_str}`"))
                             )
                     },
+                    BinaryHandsNotPrimitive(group, Spanned(op, op_span), error, Spanned(lhs_ty, lhs_span), Spanned(rhs_ty, rhs_span)) => {
+                        let lhs_color = colors.next();
+                        let rhs_color = colors.next();
+                        let op_color = colors.next();
+                        let lhs_ty_str = workspace.display_type(&rodeo, lhs_ty).fg(lhs_color);
+                        let rhs_ty_str = workspace.display_type(&rodeo, rhs_ty).fg(rhs_color);
+                        let op_str = Into::<&'static str>::into(op).fg(op_color);
+                        let group_str =  Into::<&'static str>::into(group).fg(op_color);
+
+                        rep.with_message(format!("Cannot compute {op_str} ({group_str}) for types `{lhs_ty_str}` and `{rhs_ty_str}`"))
+                        .with_label(
+                            ariadne::Label::new((&input_name as &str, lhs_span.into_range()))
+                                .with_color(lhs_color)
+                                .with_message(format!("This is of type {lhs_ty_str}"))
+                        )
+                        .with_label(
+                            ariadne::Label::new((&input_name as &str, rhs_span.into_range()))
+                                .with_color(rhs_color)
+                                .with_message(format!("This is of type {rhs_ty_str}"))
+                        ).with_label(
+                            ariadne::Label::new((&input_name as &str, op_span.into_range()))
+                                .with_color(op_color)
+                                .with_message(format!("Using binary operation {op_str} ({group_str})"))
+                        )
+                    },
                 }
                 .finish()
                 .print((&input_name as &str, ariadne::Source::from(file.src())))

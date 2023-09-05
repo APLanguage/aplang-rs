@@ -34,6 +34,11 @@ pub enum Identifier {
     #[regex("as")]
     As,
 
+    #[token("true")]
+    True,
+    #[regex("false")]
+    False,
+
     #[regex(".+")]
     Custom,
 }
@@ -221,7 +226,7 @@ pub enum Operation {
 
     Unknown,
 }
-#[derive(PartialEq, Eq, Debug, Clone, Copy, Display)]
+#[derive(PartialEq, Eq, Debug, Clone, Copy, Display, IntoStaticStr)]
 pub enum OperationGroup {
     Logic,
     Equality,

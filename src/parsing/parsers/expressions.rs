@@ -162,7 +162,6 @@ where EP: TokenParser<'a, I, Expression> + Clone + 'a {
             })
             .map(Expression::Number)
             .boxed(),
-        call(expr_parser.clone()).map(Expression::Call),
         select! { Token::String(literal_type) => literal_type }
             .map_with_state(
                 |literal_type, span: SimpleSpan, input: &mut ParserState<'a>| {
@@ -174,6 +173,9 @@ where EP: TokenParser<'a, I, Expression> + Clone + 'a {
                 },
             )
             .map(Expression::StringLiteral),
+        keyword(Identifier::True).map(|_| Expression::Bool(true)),
+        keyword(Identifier::False).map(|_| Expression::Bool(false)),
+        call(expr_parser.clone()).map(Expression::Call),
         expr_parser
             .clone()
             .delimited_by(just(Token::ParenOpen), just(Token::ParenClosed)),
