@@ -163,26 +163,29 @@ fn main() {
                         }
                         rep
                     }
-                    TypesAreNotMatching(a, b) => rep
-                        .with_message("Types are not matching")
-                        .with_label({
-                            let color = colors.next();
-                            ariadne::Label::new((&input_name as &str, a.1.into_range()))
-                                .with_color(color)
-                                .with_message(format!(
-                                    "this is of type: {}",
-                                    workspace.display_type(&rodeo, a.0).fg(color)
-                                ))
-                        })
-                        .with_label({
-                            let color = colors.next();
-                            ariadne::Label::new((&input_name as &str, b.1.into_range()))
-                                .with_color(color)
-                                .with_message(format!(
-                                    "this is of type: {}",
-                                    workspace.display_type(&rodeo, b.0).fg(color)
-                                ))
-                        }),
+                    TypesAreNotMatching(context, a, b) => {
+                        use resolution::type_resolution::TypesAreNotMatchingContext::*;
+                        let ty_a_color = colors.next();
+                        let ty_a_str = workspace.display_type(&rodeo, a.0).fg(ty_a_color);
+                        let ty_b_color = colors.next();
+                        let ty_b_str = workspace.display_type(&rodeo, b.0).fg(ty_b_color);
+                        rep
+                            .with_message(match context {
+                                If => format!("Ifs arms des not have matching types, both must be of type `{ty_a_str}`, but second arm is `{ty_b_str}`"),
+                                Assignment => format!("Assignments right-hand's type does not match left-hand's type. Expected `{ty_a_str}`, got `{ty_b_str}`."),
+                                FuncRet => format!("Return's expression's type does not match functions return type: function returns `{ty_a_str}` but the return's expression is of type `{ty_b_str}`."),
+                            })
+                            .with_label(
+                                ariadne::Label::new((&input_name as &str, a.1.into_range()))
+                                    .with_color(ty_a_color)
+                                    .with_message(format!("this is of type: {ty_a_str}"))
+                            )
+                            .with_label(
+                                ariadne::Label::new((&input_name as &str, b.1.into_range()))
+                                    .with_color(ty_b_color)
+                                    .with_message(format!("this is of type: {ty_b_str}"))
+                            )
+                    },
                     FieldNotFound(
                         Spanned((dep, struct_id), base_span),
                         Spanned(name, name_span),
@@ -306,7 +309,7 @@ fn main() {
                                 .with_message(format!("this condition is of type `{ty_str}`"))
                             )
                     },
-                    BinaryHandsNotPrimitive(group, Spanned(op, op_span), error, Spanned(lhs_ty, lhs_span), Spanned(rhs_ty, rhs_span)) => {
+                    BinaryHandsNotPrimitive(group, Spanned(op, op_span), _error, Spanned(lhs_ty, lhs_span), Spanned(rhs_ty, rhs_span)) => {
                         let lhs_color = colors.next();
                         let rhs_color = colors.next();
                         let op_color = colors.next();

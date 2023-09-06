@@ -27,8 +27,8 @@ fn main() {
     var test = new_newborn(r"a") + new_newborn(r"b")
     var test = new_newborn(r"a") + 1u16
     var test = 1u16 + new_newborn(r"b")
-    var d1 = !1u16
-    var a = c + (d = e) - 2u16 / 2u16
+    var d = if (1u16) 1u16 else 1u8
+    var a = c + (d = r"") - 2u16 / 2u16
     println(r"Hello World!")
     val person = Person(r"Amejonah", 42u8)
     test_person(person)

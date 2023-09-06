@@ -80,7 +80,7 @@ pub enum TypeResError {
     FunctionNotFound(Spanned<Spur>, Vec<Spanned<TypeId>>),
     VariableNotFound(Spanned<Spur>, Option<TypeId>),
     FieldNotFound(Spanned<(DependencyId, StructId)>, Spanned<Spur>),
-    TypesAreNotMatching(Spanned<TypeId>, Spanned<TypeId>),
+    TypesAreNotMatching(TypesAreNotMatchingContext, Spanned<TypeId>, Spanned<TypeId>),
     SignNotMatching(
         Spanned<(bool, IntegerWidth)>,
         OperationGroup,
@@ -98,6 +98,14 @@ pub enum TypeResError {
         Spanned<TypeId>,
     ),
 }
+
+#[derive(Debug)]
+pub enum TypesAreNotMatchingContext {
+    If,
+    Assignment,
+    FuncRet,
+}
+
 #[derive(Debug)]
 pub enum FunctionReturnProblem {
     ExpectedEmptyReturn,
@@ -208,7 +216,43 @@ impl<'a> ResolutionEnv<'a> {
                 self.resolve_primitive(PrimitiveType::Boolean),
                 fir::Expression::Bool(*b),
             ),
-            e => todo!("Expression::{}", Into::<&'static str>::into(e)),
+            ast::expressions::Expression::If {
+                condition,
+                then,
+                other,
+            } => {
+                let Spanned(cond, cond_span) = condition.as_ref();
+                let bool_ty = self.resolve_primitive(PrimitiveType::Boolean);
+                let cond = self.resolve_expression(Some(bool_ty), cond, *cond_span);
+                if cond.info != bool_ty {
+                    self.add_error(
+                        TypeResError::ConditionNotBool(cond.as_spanned_cloned_info()),
+                        span,
+                    );
+                }
+                let Spanned(then, then_span) = then.as_ref();
+                let then = Box::new(self.resolve_expression(try_to_be, then, *then_span));
+                let Spanned(other, other_span) = other.as_ref();
+                let other = Box::new(self.resolve_expression(Some(then.info), other, *other_span));
+                if then.info != other.info {
+                    self.add_error(
+                        TypeResError::TypesAreNotMatching(
+                            TypesAreNotMatchingContext::If,
+                            then.as_spanned_cloned_info(),
+                            other.as_spanned_cloned_info(),
+                        ),
+                        span,
+                    );
+                }
+                (
+                    then.info,
+                    fir::Expression::If {
+                        condition: cond.into(),
+                        then,
+                        other,
+                    },
+                )
+            }
         };
         Infoed {
             inner: expr,
@@ -837,6 +881,7 @@ impl<'a> ResolutionEnv<'a> {
                 if ty != expr_ty {
                     self.add_error(
                         TypeResError::TypesAreNotMatching(
+                            TypesAreNotMatchingContext::Assignment,
                             Spanned(ty, *var_span),
                             Spanned(expr_ty, *expr_span),
                         ),
@@ -1026,6 +1071,7 @@ impl<'a> ResolutionEnv<'a> {
                         if a != b.0 {
                             self.add_error(
                                 TypeResError::TypesAreNotMatching(
+                                    TypesAreNotMatchingContext::FuncRet,
                                     self.func_info
                                         .decl
                                         .ast
