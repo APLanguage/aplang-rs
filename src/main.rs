@@ -200,7 +200,7 @@ fn main() {
                         let struct_color = colors.next();
                         rep.with_message(format!(
                             "No field `{}` found for struct ({}) {}",
-                            rodeo.resolve(&name).fg(struct_color),
+                            rodeo.resolve(&name).fg(ariadne::Color::Red),
                             project_name.fg(struct_color),
                             struct_path.fg(struct_color),
                         ))
@@ -214,7 +214,7 @@ fn main() {
                         })
                         .with_label(
                             ariadne::Label::new((&input_name as &str, name_span.into_range()))
-                                .with_color(colors.next())
+                                .with_color(ariadne::Color::Red)
                                 .with_message("Cannot find this field"),
                         )
                     }

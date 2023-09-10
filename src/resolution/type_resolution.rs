@@ -865,26 +865,34 @@ impl<'a> ResolutionEnv<'a> {
                 let fir::Expression::CallChain { calls, .. } = &chain else {
                     unreachable!("BUG: resolve_call_chain should return a CallChain");
                 };
-                let Infoed {
+                if let Some(Infoed {
                     inner: last_kind,
                     info: last_ty,
                     span: last_span,
-                } = calls
-                    .last()
-                    .unwrap_or_else(|| todo!("BUG: should have a least one element in the chain: happens when chain not fully resolved!"));
-                (
-                    *last_ty,
-                    match last_kind {
-                        fir::CallKind::StructField(dep, struct_id, field_id) => {
-                            AssignableTarget::StructField(*last_ty, *dep, *struct_id, *field_id)
-                        }
-                        fir::CallKind::Variable(var_type) => {
-                            AssignableTarget::Var(*last_ty, var_type.to_owned())
-                        }
-                        _ => todo!("last_kind: _"),
-                    },
-                    *last_span,
-                )
+                }) = calls.last()
+                {
+                    (
+                        *last_ty,
+                        match last_kind {
+                            fir::CallKind::StructField(dep, struct_id, field_id) => {
+                                AssignableTarget::StructField(*last_ty, *dep, *struct_id, *field_id)
+                            }
+                            fir::CallKind::Variable(var_type) => {
+                                AssignableTarget::Var(*last_ty, var_type.to_owned())
+                            }
+                            _ => AssignableTarget::Unnassignable,
+                        },
+                        *last_span,
+                    )
+                } else {
+                    (try_to_be.unwrap_or_else(|| {
+                        self.resolver.register_type(Type::Error(
+                            self.func_info.file_id,
+                            *call_span,
+                            "unresolved call chain",
+                        ))
+                    }), AssignableTarget::Unnassignable, *call_span)
+                }
             }
             ast::expressions::Expression::Call(CallKind::Identifier(Spanned(name, var_span))) => {
                 if let Some((ty, var_ty)) = self.find_var(*name) {

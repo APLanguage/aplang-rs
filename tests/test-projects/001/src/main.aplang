@@ -36,10 +36,12 @@ fn main() {
     var d = if (1u16) 1u16 else 1u8
     var a = c + (d = r"") - 2u16 / 2u16
     println(r"Hello World!")
-    val person = Person(r"Amejonah", 42u8)
+    val person = Person(r"Amejonah", 42u8, Address(r"a", 12u16))
     test_person(person)
     val test = person.a
     if(1u16) while(1u16) {}
     while(1u16) {}
     test_wrong_return(r"6es6") = 0u16
+    b.a.b = test_wrong_return(16u16)
+    e = person.address.b
 }
