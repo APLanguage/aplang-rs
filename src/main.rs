@@ -135,7 +135,7 @@ fn main() {
                                 })
                             })
                             .collect_vec();
-                        let fn_color = colors.next();
+                        let fn_color = ariadne::Color::Red;
                         let mut rep = rep
                             .with_message(format!("Couldn't find function `{}` matching parameter types", rodeo.resolve(&name).fg(fn_color)))
                             .with_label(
@@ -167,7 +167,7 @@ fn main() {
                         use resolution::type_resolution::TypesAreNotMatchingContext::*;
                         let ty_a_color = colors.next();
                         let ty_a_str = workspace.display_type(&rodeo, a.0).fg(ty_a_color);
-                        let ty_b_color = colors.next();
+                        let ty_b_color = ariadne::Color::Red;
                         let ty_b_str = workspace.display_type(&rodeo, b.0).fg(ty_b_color);
                         rep
                             .with_message(match context {
@@ -276,36 +276,39 @@ fn main() {
                         use resolution::type_resolution::FunctionReturnProblem::*;
                         let ty_color = colors.next();
                         let unit_ty_color = colors.next();
-                        let ret_color = colors.next();
-                        let ty_str = workspace.display_type(&rodeo, ty).fg(ty_color);
+                        let ret_color = ariadne::Color::Red;
                         let unit_ty_str = "unit".fg(unit_ty_color);
                         match problem {
-                            ExpectedEmptyReturn => rep.with_message(format!("Expected no expression for the return statement as the function returns `{unit_ty_str}`, but got an expression returning `{ty_str}`" ))
-                                .with_label(ariadne::Label::new((&input_name as &str, ty_span.into_range()))
-                                    .with_color(ty_color)
-                                    .with_message(format!("this expression returns a `{ty_str}`"))
-                                ).with_note(format!("Either remove the expression, or make the function return `{ty_str}`."))
-                                ,
-                            ExpectedAReturnExpr => rep.with_message(format!("Expected an expression for the return statement as the function returns `{ty_str}`."))
-                                .with_label(ariadne::Label::new((&input_name as &str, span.into_range()))
-                                    .with_color(ret_color)
-                                    .with_message("this return has no expression")
-                                ).with_label(ariadne::Label::new((&input_name as &str, ty_span.into_range()))
-                                    .with_color(ty_color)
-                                    .with_message(format!("this function returns `{ty_str}`"))
-                                ).with_note(format!("Either add an expression, or make the function return `{unit_ty_str}`.")),
+                            ExpectedEmptyReturn => {
+                                let ty_str = workspace.display_type(&rodeo, ty).fg(ariadne::Color::Red);
+                                rep.with_message(format!("Expected no expression for the return statement as the function returns `{unit_ty_str}`, but got an expression returning `{ty_str}`" ))
+                                    .with_label(ariadne::Label::new((&input_name as &str, ty_span.into_range()))
+                                        .with_color(ty_color)
+                                        .with_message(format!("this expression returns a `{ty_str}`"))
+                                    ).with_note(format!("Either remove the expression, or make the function return `{ty_str}`."))
+                                },
+                            ExpectedAReturnExpr => {
+                                let ty_str = workspace.display_type(&rodeo, ty).fg(ty_color);
+                                rep.with_message(format!("Expected an expression for the return statement as the function returns `{ty_str}`."))
+                                    .with_label(ariadne::Label::new((&input_name as &str, span.into_range()))
+                                        .with_color(ret_color)
+                                        .with_message("this return has no expression")
+                                    ).with_label(ariadne::Label::new((&input_name as &str, ty_span.into_range()))
+                                        .with_color(ty_color)
+                                        .with_message(format!("this function returns `{ty_str}`"))
+                                    ).with_note(format!("Either add an expression, or make the function return `{unit_ty_str}`."))
+                                },
                         }
                     },
                     ConditionNotBool(Spanned(ty, ty_span)) => {
-                        let ty_color = colors.next();
-                        let ty_str = workspace.display_type(&rodeo, ty).fg(ty_color);
+                        let ty_str = workspace.display_type(&rodeo, ty).fg(ariadne::Color::Red);
                         let bool_ty_color = colors.next();
                         let bool_ty_str = "bool".fg(bool_ty_color);
                         
                         rep
                             .with_message(format!("Expected condition of type `{bool_ty_str}` but got `{ty_str}`."))
                             .with_label(ariadne::Label::new((&input_name as &str, ty_span.into_range()))
-                                .with_color(ty_color)
+                                .with_color(ariadne::Color::Red)
                                 .with_message(format!("this condition is of type `{ty_str}`"))
                             )
                     },
@@ -334,6 +337,20 @@ fn main() {
                                 .with_message(format!("Using binary operation {op_str} ({group_str})"))
                         )
                     },
+                    ExpectedStructForCallChain(ty, span) => {
+                        let ty_color = ariadne::Color::Red;
+                        let ty_str = workspace.display_type(&rodeo, ty).fg(ty_color);
+                        rep.with_message(format!("Expected a struct but got `{ty_str}`."))
+                            .with_label(ariadne::Label::new(
+                                (&input_name as &str, span.into_range())
+                            ).with_message(format!("This should have been a struct, but got `{ty_str}`"))
+                        .with_color(ty_color))
+                    },
+                    VariableExpectedForAssignment(span) => rep
+                        .with_message("Cannot set a non-field for assignment's lhs.")
+                        .with_label(ariadne::Label::new(
+                            (&input_name as &str, span.into_range())
+                        ).with_message("This is not a field.").with_color(ariadne::Color::Red)),
                 }
                 .finish()
                 .print((&input_name as &str, ariadne::Source::from(file.src())))

@@ -97,6 +97,8 @@ pub enum TypeResError {
         Spanned<TypeId>,
         Spanned<TypeId>,
     ),
+    ExpectedStructForCallChain(TypeId, SimpleSpan),
+    VariableExpectedForAssignment(SimpleSpan),
 }
 
 #[derive(Debug)]
@@ -269,11 +271,32 @@ impl<'a> ResolutionEnv<'a> {
         let Spanned(base, span) = expression;
         let base = self.resolve_expression(None, base, *span);
         let mut this = base.info;
-        let mut the_calls = vec![];
+        let mut the_calls: Vec<Infoed<fir::CallKind>> = vec![];
         for call in calls.iter() {
             let Some((dep, struct_id)) = self.resolver.type_registery.borrow().get_as_struct(this)
             else {
-                todo!("Expression::CallChain/handle errors")
+                let last_span = the_calls
+                    .last()
+                    .map(|i| i.span)
+                    .unwrap_or_else(|| base.span);
+                self.add_error(
+                    TypeResError::ExpectedStructForCallChain(this, last_span),
+                    *span,
+                );
+                return (
+                    self.resolver
+                        .type_registery
+                        .borrow_mut()
+                        .register_type(Type::Error(
+                            self.func_info.file_id,
+                            last_span,
+                            "not a struct",
+                        )),
+                    fir::Expression::CallChain {
+                        expression: Box::new(base),
+                        calls: the_calls.into_boxed_slice(),
+                    },
+                );
             };
             let Spanned(CallKind::Identifier(Spanned(name, _)), span) = call else {
                 todo!("Expression::CallChain/methods")
@@ -285,7 +308,7 @@ impl<'a> ResolutionEnv<'a> {
                             (dep, struct_id),
                             the_calls
                                 .last()
-                                .map(|(Spanned(_, s), _)| *s)
+                                .map(|i| i.span)
                                 .unwrap_or_else(|| base.span),
                         ),
                         Spanned(*name, *span),
@@ -303,11 +326,7 @@ impl<'a> ResolutionEnv<'a> {
                         )),
                     fir::Expression::CallChain {
                         expression: Box::new(base),
-                        calls: the_calls
-                            .into_iter()
-                            .map(|(ck, _)| ck)
-                            .collect_vec()
-                            .into_boxed_slice(),
+                        calls: the_calls.into_boxed_slice(),
                     },
                 );
             };
@@ -328,20 +347,20 @@ impl<'a> ResolutionEnv<'a> {
                         .unwrap_or_else(|t| t),
                 )
             }).expect("should have been resolved and the field id of both ast and outline should match");
-            the_calls.push((
-                Spanned(fir::CallKind::StructField(dep, struct_id, fid), *span),
-                this,
-            ));
+            the_calls.push(Infoed {
+                inner: fir::CallKind::StructField(dep, struct_id, fid),
+                info: this,
+                span: *span,
+            });
         }
         (
-            the_calls.last().expect("should have at least one call").1,
+            the_calls
+                .last()
+                .expect("should have at least one call")
+                .info,
             fir::Expression::CallChain {
                 expression: Box::new(base),
-                calls: the_calls
-                    .into_iter()
-                    .map(|(ck, _)| ck)
-                    .collect_vec()
-                    .into_boxed_slice(),
+                calls: the_calls.into_boxed_slice(),
             },
         )
     }
@@ -839,22 +858,48 @@ impl<'a> ResolutionEnv<'a> {
         let Spanned(call, call_span) = call;
         let Spanned(op, op_span) = op;
         let Spanned(expr, expr_span) = expression;
-        match call {
+        let whole_span: SimpleSpan = (call_span.start..expr_span.end).into();
+        let (target_ty, target, target_span) = match call {
             ast::expressions::Expression::CallChain { expression, calls } => {
-                todo!("Expression::Assignement/Expression::CallChain")
+                let (ty, chain) = self.resolve_call_chain(expression, calls);
+                let fir::Expression::CallChain { calls, .. } = &chain else {
+                    unreachable!("BUG: resolve_call_chain should return a CallChain");
+                };
+                let Infoed {
+                    inner: last_kind,
+                    info: last_ty,
+                    span: last_span,
+                } = calls
+                    .last()
+                    .unwrap_or_else(|| todo!("BUG: should have a least one element in the chain: happens when chain not fully resolved!"));
+                (
+                    *last_ty,
+                    match last_kind {
+                        fir::CallKind::StructField(dep, struct_id, field_id) => {
+                            AssignableTarget::StructField(*last_ty, *dep, *struct_id, *field_id)
+                        }
+                        fir::CallKind::Variable(var_type) => {
+                            AssignableTarget::Var(*last_ty, var_type.to_owned())
+                        }
+                        _ => todo!("last_kind: _"),
+                    },
+                    *last_span,
+                )
             }
             ast::expressions::Expression::Call(CallKind::Identifier(Spanned(name, var_span))) => {
-                let Some((ty, var_ty)) = self.find_var(*name) else {
+                if let Some((ty, var_ty)) = self.find_var(*name) {
+                    (ty, AssignableTarget::Var(ty, var_ty), *var_span)
+                } else {
                     self.add_error(
                         TypeResError::VariableNotFound(Spanned(*name, *var_span), try_to_be),
-                        *var_span,
+                        whole_span,
                     );
                     let Infoed {
                         inner: fir_expr,
                         info: expr_ty,
                         ..
                     } = self.resolve_expression(try_to_be, expr, *expr_span);
-                    return (
+                    (
                         try_to_be.unwrap_or_else(|| {
                             self.resolver.register_type(Type::Error(
                                 self.func_info.file_id,
@@ -862,63 +907,76 @@ impl<'a> ResolutionEnv<'a> {
                                 "variable not found",
                             ))
                         }),
-                        fir::Expression::Assignement {
-                            call: Spanned(Err(()), *call_span), // should probably make it return a spur or something
-                            op: Spanned(op, op_span),
-                            expression: Box::new(Infoed {
-                                inner: fir_expr,
-                                info: expr_ty,
-                                span: *expr_span,
-                            }),
-                        },
-                    );
-                };
-                let Infoed {
-                    inner: fir_expr,
-                    info: expr_ty,
-                    ..
-                } = self.resolve_expression(Some(ty), expr, *expr_span);
-                if ty != expr_ty {
-                    self.add_error(
-                        TypeResError::TypesAreNotMatching(
-                            TypesAreNotMatchingContext::Assignment,
-                            Spanned(ty, *var_span),
-                            Spanned(expr_ty, *expr_span),
-                        ),
-                        (call_span.start..expr_span.end).into(),
-                    );
-                    (
-                        ty,
-                        fir::Expression::Assignement {
-                            call: Spanned(Ok(AssignableTarget::Var(ty, var_ty)), *call_span),
-                            op: Spanned(op, op_span),
-                            expression: Box::new(Infoed {
-                                inner: fir_expr,
-                                info: expr_ty,
-                                span: *expr_span,
-                            }),
-                        },
-                    )
-                } else {
-                    (
-                        expr_ty,
-                        fir::Expression::Assignement {
-                            call: Spanned(Ok(AssignableTarget::Var(ty, var_ty)), *call_span),
-                            op: Spanned(op, op_span),
-                            expression: Box::new(Infoed {
-                                inner: fir_expr,
-                                info: expr_ty,
-                                span: *expr_span,
-                            }),
-                        },
+                        AssignableTarget::Unnassignable,
+                        *call_span,
                     )
                 }
             }
-            _ => todo!(
-                "Expression::Assignement/handle wrong lhs: Expression::{}",
-                Into::<&'static str>::into(call)
-            ),
+            expr => {
+                let ty = self.resolve_expression(try_to_be, expr, *expr_span).info;
+                self.add_error(
+                    TypeResError::VariableExpectedForAssignment(*call_span),
+                    whole_span,
+                );
+                (
+                    try_to_be.unwrap_or_else(|| {
+                        self.resolver.register_type(Type::Error(
+                            self.func_info.file_id,
+                            *call_span,
+                            "not assignable",
+                        ))
+                    }),
+                    AssignableTarget::Unnassignable,
+                    *call_span,
+                )
+            }
+        };
+        let Infoed {
+            inner: fir_expr,
+            info: expr_ty,
+            ..
+        } = self.resolve_expression(Some(target_ty), expr, *expr_span);
+        if matches!(target, AssignableTarget::Unnassignable)
+            || self.resolver.type_registery.borrow().is_error(target_ty)
+        {
+            return (
+                target_ty,
+                fir::Expression::Assignement {
+                    call: Spanned(Err(()), *call_span), // should probably make it return a spur or something
+                    op: Spanned(op, op_span),
+                    expression: Box::new(Infoed {
+                        inner: fir_expr,
+                        info: expr_ty,
+                        span: *expr_span,
+                    }),
+                },
+            );
+        } else if target_ty != expr_ty {
+            self.add_error(
+                TypeResError::TypesAreNotMatching(
+                    TypesAreNotMatchingContext::Assignment,
+                    Spanned(target_ty, target_span),
+                    Spanned(expr_ty, *expr_span),
+                ),
+                (call_span.start..expr_span.end).into(),
+            );
         }
+        (
+            if target_ty != expr_ty {
+                target_ty
+            } else {
+                expr_ty
+            },
+            fir::Expression::Assignement {
+                call: Spanned(Ok(target), *call_span),
+                op: Spanned(op, op_span),
+                expression: Box::new(Infoed {
+                    inner: fir_expr,
+                    info: expr_ty,
+                    span: *expr_span,
+                }),
+            },
+        )
     }
 
     fn resolve_unary(

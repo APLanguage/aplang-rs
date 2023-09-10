@@ -1,8 +1,14 @@
 use(std) std::println
 
+struct Address {
+    val street: str,
+    val number: u16
+}
+
 struct Person {
     val name: str,
-    val age: u8
+    val age: u8,
+    val address: Address
 }
 
 fn test_person(person: Person) {
@@ -35,4 +41,5 @@ fn main() {
     val test = person.a
     if(1u16) while(1u16) {}
     while(1u16) {}
+    test_wrong_return(r"6es6") = 0u16
 }

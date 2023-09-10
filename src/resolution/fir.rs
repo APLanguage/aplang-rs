@@ -21,7 +21,7 @@ pub struct Function {
     pub statements: Box<[Statement]>,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum VariableType {
     Local(LocalVarId),
     Parameter(usize),
@@ -42,6 +42,8 @@ pub enum CallKind {
 #[derive(Debug, PartialEq)]
 pub enum AssignableTarget {
     Var(TypeId, VariableType),
+    StructField(TypeId, DependencyId, StructId, usize),
+    Unnassignable
 }
 
 #[derive(Debug, PartialEq)]
@@ -56,7 +58,7 @@ pub enum Expression {
     Bool(bool),
     CallChain {
         expression: Box<Infoed<Expression>>,
-        calls: Box<[Spanned<CallKind>]>,
+        calls: Box<[Infoed<CallKind>]>,
     },
     Call(Spanned<CallKind>),
     OperationChain {
@@ -115,5 +117,9 @@ pub enum Statement {
 }
 
 impl Infoable for Expression {
+    type Info = TypeId;
+}
+
+impl Infoable for CallKind {
     type Info = TypeId;
 }
