@@ -166,9 +166,9 @@ pub fn resolve_workspace_outlines(
     if !import_errs.is_empty() {
         return import_errs;
     }
-    let func_errs = resolve_function_outline(workspace, dependency_id);
-    let var_errs = resolve_variable_outline(workspace, dependency_id);
-    let struct_errs = resolve_struct_outline(workspace, dependency_id);
+    let func_errs = resolve_function_outline(rodeo, workspace, dependency_id);
+    let var_errs = resolve_variable_outline(rodeo, workspace, dependency_id);
+    let struct_errs = resolve_struct_outline(rodeo, workspace, dependency_id);
     let mut errs = HashMap::new();
     for (k, v) in func_errs.into_iter().chain(var_errs).chain(struct_errs) {
         v.into_iter()
@@ -178,6 +178,7 @@ pub fn resolve_workspace_outlines(
 }
 
 pub fn resolve_function_outline(
+    rodeo: &Rodeo,
     workspace: &mut Workspace,
     dependency_id: DependencyId,
 ) -> HashMap<FileId, Vec<SimpleSpan>> {
@@ -192,7 +193,7 @@ pub fn resolve_function_outline(
     let mut to_update = HashMap::<FunctionId, ResolvedFunctionOutline>::new();
 
     for (func_id, func) in project.pool.functions.iter() {
-        let name_resolver = workspace_read.resolver_by_file(dependency_id, func.file_id);
+        let name_resolver = workspace_read.resolver_by_file(rodeo, dependency_id, func.file_id);
         let Function { parameters, ty, .. } = &func.decl.ast;
         let parameters: Box<[Result<TypeId, TypeId>]> =
             resolve_multiple(parameters.iter().map(|param| &param.ty), &name_resolver);
@@ -233,6 +234,7 @@ pub fn resolve_function_outline(
 }
 
 pub fn resolve_variable_outline(
+    rodeo: &Rodeo,
     workspace: &mut Workspace,
     dependency_id: DependencyId,
 ) -> HashMap<FileId, Vec<SimpleSpan>> {
@@ -248,7 +250,7 @@ pub fn resolve_variable_outline(
     let mut to_update = HashMap::<VariableId, ResolvedVariableOutline>::new();
 
     for (var_id, var) in project.pool.variables.iter() {
-        let name_resolver = workspace_read.resolver_by_file(dependency_id, var.file_id);
+        let name_resolver = workspace_read.resolver_by_file(rodeo, dependency_id, var.file_id);
         let Variable { ty, .. } = &var.decl.ast;
         let ty = ty.as_ref().map(|ty| resolve_singular(ty, &name_resolver));
         if let Some(e) = ty.and_then(|r| r.err().to_owned()) {
@@ -282,6 +284,7 @@ pub fn resolve_variable_outline(
 }
 
 pub fn resolve_struct_outline(
+    rodeo: &Rodeo,
     workspace: &mut Workspace,
     dependency_id: DependencyId,
 ) -> HashMap<FileId, Vec<SimpleSpan>> {
@@ -295,7 +298,7 @@ pub fn resolve_struct_outline(
     let mut to_update = HashMap::<StructId, ResolvedStructOutline>::new();
 
     for (struct_id, strct) in project.pool.structs.iter() {
-        let name_resolver = workspace_read.resolver_by_file(dependency_id, strct.file_id);
+        let name_resolver = workspace_read.resolver_by_file(rodeo, dependency_id, strct.file_id);
         let (Struct { fields, .. }, _) = &strct.decl.ast;
         let fields = resolve_multiple(fields.iter().map(|field| &field.ty), &name_resolver);
         for e in fields.iter().filter_map(|r| r.err()) {

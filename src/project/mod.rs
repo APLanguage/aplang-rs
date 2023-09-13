@@ -18,7 +18,7 @@ use crate::{
 use chumsky::span::SimpleSpan;
 use either::Either;
 use itertools::Itertools;
-use lasso::{Spur, Rodeo};
+use lasso::{Rodeo, Spur};
 use slotmap::{new_key_type, SlotMap};
 
 use crate::parsing::ast::declarations::{Function, Struct, UseDeclaration};
@@ -141,7 +141,12 @@ impl TypeRegistry {
             .unwrap()
     }
 
-    pub fn display_type(&self, rodeo: &Rodeo, dependencies: &Dependencies, type_id: TypeId) -> String {
+    pub fn display_type(
+        &self,
+        rodeo: &Rodeo,
+        dependencies: &Dependencies,
+        type_id: TypeId,
+    ) -> String {
         self.get(type_id).map_or_else(
             || "?".to_string(),
             |ty| match ty {
@@ -149,13 +154,13 @@ impl TypeRegistry {
                 Type::Data(dep, struct_id) => {
                     let dependency_info = dependencies.get_dependency(*dep).unwrap();
                     let project_name = rodeo.resolve(&dependency_info.name);
-                        let struct_path = &dependency_info
-                            .project
-                            .struct_path(*struct_id)
-                            .map(|s| rodeo.resolve(&s))
-                            .join("::");
+                    let struct_path = &dependency_info
+                        .project
+                        .struct_path(*struct_id)
+                        .map(|s| rodeo.resolve(&s))
+                        .join("::");
                     format!("({project_name}) {struct_path}")
-                },
+                }
                 Type::Array { ty: _, size: _ } => todo!("Type::Array"),
                 Type::Function {
                     parameters: _,
@@ -237,34 +242,40 @@ impl Workspace {
         self._project
     }
 
-    pub fn resolver_by_scope(
-        &self,
+    pub fn resolver_by_scope<'a>(
+        &'a self,
+        rodeo: &'a Rodeo,
         dependency_id: DependencyId,
         scope_id: ScopeId,
-    ) -> FileScopedNameResolver<'_> {
+    ) -> FileScopedNameResolver<'a> {
         FileScopedNameResolver::new_with_scope(
             &self.dependencies,
             self.type_registery.clone(),
             dependency_id,
             scope_id,
+            rodeo,
         )
     }
 
-    pub fn resolver_by_file(
-        &self,
+    pub fn resolver_by_file<'a>(
+        &'a self,
+        rodeo: &'a Rodeo,
         dependency_id: DependencyId,
         file_id: FileId,
-    ) -> FileScopedNameResolver<'_> {
+    ) -> FileScopedNameResolver<'a> {
         FileScopedNameResolver::new_with_file(
             &self.dependencies,
             self.type_registery.clone(),
             dependency_id,
             file_id,
+            rodeo,
         )
     }
 
     pub fn display_type(&self, rodeo: &Rodeo, ty: TypeId) -> String {
-        self.type_registery.borrow().display_type(rodeo, &self.dependencies, ty)
+        self.type_registery
+            .borrow()
+            .display_type(rodeo, &self.dependencies, ty)
     }
 }
 

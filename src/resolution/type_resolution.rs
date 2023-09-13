@@ -7,13 +7,15 @@ use std::{collections::HashMap, ops::ControlFlow, vec::Vec};
 use chumsky::span::{SimpleSpan, Span};
 use either::Either;
 use itertools::{FoldWhile, Itertools};
-use lasso::Spur;
+use lasso::{Rodeo, Spur};
+use num::BigInt;
+use paste::paste;
 use slotmap::SlotMap;
 
 use crate::{
     parsing::{
         ast::{self, declarations::Parameter, expressions::CallKind},
-        parsers,
+        parsers::{self, number::LiteralWidth},
         tokenizer::{Operation, OperationGroup},
         Infoed, Spanned,
     },
@@ -32,6 +34,7 @@ use super::{
 };
 
 pub fn resolve_and_typecheck_functions(
+    rodeo: &Rodeo,
     workspace: &mut Workspace,
     dependency_id: DependencyId,
 ) -> HashMap<FileId, Vec<Spanned<TypeResError>>> {
@@ -47,7 +50,7 @@ pub fn resolve_and_typecheck_functions(
         .iter()
     {
         let (func, errs) = resolve_function(
-            workspace_read.resolver_by_file(dependency_id, func_info.file_id),
+            workspace_read.resolver_by_file(rodeo, dependency_id, func_info.file_id),
             func_id,
             func_info,
         );
@@ -169,7 +172,7 @@ impl<'a> ResolutionEnv<'a> {
             ast::statements::Statement::Expression(expr) => {
                 fir::Statement::Expression(self.resolve_expression(None, expr, *span))
             }
-            ast::statements::Statement::Declaration(delr) => self.resolve_declaration(delr),
+            ast::statements::Statement::Declaration(delr) => self.resolve_declaration(delr, *span),
             ast::statements::Statement::None => fir::Statement::None,
             ast::statements::Statement::ControlFlow(cf) => {
                 fir::Statement::ControlFlow(self.resolve_control_flow(cf, *span))
@@ -188,7 +191,9 @@ impl<'a> ResolutionEnv<'a> {
                 self.resolve_primitive(PrimitiveType::String),
                 fir::Expression::StringLiteral(*l),
             ),
-            ast::expressions::Expression::Number(rslt) => self.resolve_number_literal(rslt, span),
+            ast::expressions::Expression::Number(rslt) => {
+                self.resolve_number_literal(try_to_be, rslt, span)
+            }
             ast::expressions::Expression::Call(call_kind) => {
                 self.resolve_call_kind(span, try_to_be, call_kind)
             }
@@ -482,44 +487,113 @@ impl<'a> ResolutionEnv<'a> {
 
     fn resolve_number_literal(
         &mut self,
+        try_to_be: Option<TypeId>,
         rslt: &Result<parsers::number::NumberLiteral, parsers::number::NumberLiteralError>,
         span: SimpleSpan,
     ) -> (TypeId, fir::Expression) {
         match rslt {
-            Ok(lit) => self.resolve_number_literal_ok(lit),
-            Err(_) => (
-                self.resolve_type(Type::Error(
-                    self.func_info.file_id,
-                    span,
-                    "error resolving broken number literal",
-                )),
-                fir::Expression::Number(rslt.clone()),
+            Ok(lit) => self.resolve_number_literal_ok(try_to_be, lit),
+            Err(e) => (
+                try_to_be.unwrap_or_else(|| {
+                    self.resolve_type(Type::Error(
+                        self.func_info.file_id,
+                        span,
+                        "error resolving broken number literal",
+                    ))
+                }),
+                fir::Expression::Number(Err(e.clone())),
             ),
         }
     }
 
     fn resolve_number_literal_ok(
         &mut self,
+        try_to_be: Option<TypeId>,
         lit: &parsers::number::NumberLiteral,
     ) -> (TypeId, fir::Expression) {
-        let expr = fir::Expression::Number(Ok(lit.clone()));
-        let ty = match lit {
-            parsers::number::NumberLiteral::Unsigned(_, w) => {
-                self.resolve_primitive(PrimitiveType::Integer(false, (*w).into()))
+        let (ty, lit) = match lit {
+            parsers::number::NumberLiteral::Unsigned(n, w) => (
+                self.resolve_primitive(PrimitiveType::Integer(false, (*w).into())),
+                fir::NumberLiteral::Integer(false, *n as i128, (*w).into()),
+            ),
+            parsers::number::NumberLiteral::Signed(n, w) => (
+                self.resolve_primitive(PrimitiveType::Integer(true, (*w).into())),
+                fir::NumberLiteral::Integer(true, *n as i128, (*w).into()),
+            ),
+            parsers::number::NumberLiteral::Float(n, w) => (
+                self.resolve_primitive(PrimitiveType::Float((*w).into())),
+                fir::NumberLiteral::Float(*n, (*w).into()),
+            ),
+            parsers::number::NumberLiteral::Inferred(int) => {
+                let int = int.as_ref().expect_left("TODO: floats");
+                let Some(try_to_be @ (PrimitiveType::Float(_) | PrimitiveType::Integer(_, _))) =
+                    try_to_be
+                        .and_then(|t| self.resolver.type_registery.borrow().get_as_primitive(t))
+                else {
+                    let Some((i, w)) = TryInto::<i32>::try_into(int)
+                        .map(|i| (i as i64, LiteralWidth::_32))
+                        .or_else(|_| TryInto::<i64>::try_into(int).map(|i| (i, LiteralWidth::_64)))
+                        .ok()
+                    else {
+                        todo!("NumberLiteral::Inferred/default/error")
+                    };
+                    return (
+                        self.resolve_primitive(PrimitiveType::Integer(true, w.into())),
+                        fir::Expression::Number(Ok(fir::NumberLiteral::Integer(
+                            true,
+                            i as i128,
+                            w.into(),
+                        ))),
+                    );
+                };
+
+                macro_rules! try_parse {
+                    ($s:ident) => {
+                        paste! {
+                            TryInto::<[<$s 8>]>::try_into(int)
+                                .map(|i| (i as [<$s 64>], LiteralWidth::_8))
+                                .or_else(|_| {
+                                    TryInto::<[<$s 16>]>::try_into(int)
+                                        .map(|i| (i as [<$s 64>], LiteralWidth::_16))
+                                })
+                                .or_else(|_| {
+                                    TryInto::<[<$s 32>]>::try_into(int)
+                                        .map(|i| (i as [<$s 64>], LiteralWidth::_32))
+                                })
+                                .or_else(|_| {
+                                    TryInto::<[<$s 64>]>::try_into(int).map(|i| (i, LiteralWidth::_64))
+                                })
+                        }
+                    };
+                }
+                match try_to_be {
+                    PrimitiveType::Integer(s, w) => {
+                        let (p_w, p_i) = if s {
+                            let Ok((i, w)) = try_parse!(u) else {
+                                todo!("NumberLiteral::Inferred/into uinteger/error")
+                            };
+                            (IntegerWidth::from(w), i as i128)
+                        } else {
+                            let Ok((i, w)) = try_parse!(i) else {
+                                todo!("NumberLiteral::Inferred/into iinteger/error")
+                            };
+                            (IntegerWidth::from(w), i as i128)
+                        };
+                        println!("{w:?} {p_w:?}");
+                        if w < p_w {
+                            todo!("NumberLiteral::Inferred/downcast error")
+                        }
+                        (
+                            self.resolve_primitive(PrimitiveType::Integer(s, w.max(p_w))),
+                            fir::NumberLiteral::Integer(s, p_i, p_w),
+                        )
+                    }
+                    PrimitiveType::Float(w) => todo!("PrimitiveType::Float({w:?})"),
+                    _ => unreachable!(),
+                }
             }
-            parsers::number::NumberLiteral::Signed(_, w) => {
-                self.resolve_primitive(PrimitiveType::Integer(true, (*w).into()))
-            }
-            parsers::number::NumberLiteral::Float(_, w) => {
-                self.resolve_primitive(PrimitiveType::Float((*w).into()))
-            }
-            parsers::number::NumberLiteral::Inferred {
-                unsigned,
-                signed,
-                float,
-            } => todo!("NumberLiteral::Inferred"),
         };
-        (ty, expr)
+        (ty, fir::Expression::Number(Ok(lit)))
     }
 
     fn resolve_operation_chain(
@@ -825,19 +899,39 @@ impl<'a> ResolutionEnv<'a> {
         self.errors.push(Spanned(error, span))
     }
 
-    fn resolve_declaration(&mut self, delr: &ast::declarations::Declaration) -> fir::Statement {
+    fn resolve_declaration(
+        &mut self,
+        delr: &ast::declarations::Declaration,
+        span: SimpleSpan,
+    ) -> fir::Statement {
         match delr {
             ast::declarations::Declaration::Variable(var) => {
-                let try_to_be = var
-                    .ty
-                    .as_ref()
-                    .map(|Spanned(t, span)| self.resolver.resolve_type(t).unwrap_or_else(|t| t));
+                let try_to_be = var.ty.as_ref().map(|Spanned(t, span)| {
+                    (self.resolver.resolve_type(t).unwrap_or_else(|t| t), *span)
+                });
                 let Spanned(expr, expr_span) = &var.expression;
-                let expr = self.resolve_expression(try_to_be, expr, *expr_span);
+                let expr = self.resolve_expression(try_to_be.map(|t| t.0), expr, *expr_span);
+                // TODO: typecheck
+
+                let ty = try_to_be
+                    .map(|t| {
+                        if t.0 != expr.info {
+                            self.add_error(
+                                TypeResError::TypesAreNotMatching(
+                                    TypesAreNotMatchingContext::Assignment,
+                                    Spanned(t.0, t.1),
+                                    expr.as_spanned_cloned_info(),
+                                ),
+                                span,
+                            )
+                        }
+                        t.0
+                    })
+                    .unwrap_or(expr.info);
                 let var_id = self.locals.insert(fir::Variable {
                     reassignable: var.reassignable,
                     name: var.name,
-                    ty: expr.info,
+                    ty,
                 });
                 self.var_scopes
                     .last_mut()
@@ -845,7 +939,7 @@ impl<'a> ResolutionEnv<'a> {
                     .push((var.name.0, var_id));
                 fir::Statement::VariableDeclaration { var_id, expr }
             }
-            _ => todo!("resolve_declaration/other declarations"),
+            _ => unimplemented!("resolve_declaration/other declarations"),
         }
     }
     fn resolve_assignement(
@@ -885,13 +979,17 @@ impl<'a> ResolutionEnv<'a> {
                         *last_span,
                     )
                 } else {
-                    (try_to_be.unwrap_or_else(|| {
-                        self.resolver.register_type(Type::Error(
-                            self.func_info.file_id,
-                            *call_span,
-                            "unresolved call chain",
-                        ))
-                    }), AssignableTarget::Unnassignable, *call_span)
+                    (
+                        try_to_be.unwrap_or_else(|| {
+                            self.resolver.register_type(Type::Error(
+                                self.func_info.file_id,
+                                *call_span,
+                                "unresolved call chain",
+                            ))
+                        }),
+                        AssignableTarget::Unnassignable,
+                        *call_span,
+                    )
                 }
             }
             ast::expressions::Expression::Call(CallKind::Identifier(Spanned(name, var_span))) => {

@@ -3,8 +3,13 @@ use std::{
     sync::OnceLock,
 };
 
+use either::Either;
+use lasso::Rodeo;
+use num::BigInt;
 use num_traits::{Num, PrimInt};
 use regex::Regex;
+
+use crate::typing::{FloatWidth, IntegerWidth};
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum LiteralWidthError {
@@ -18,11 +23,7 @@ pub enum NumberLiteral {
     Unsigned(u64, LiteralWidth),
     Signed(i64, LiteralWidth),
     Float(f64, LiteralWidth),
-    Inferred {
-        unsigned: Option<u64>,
-        signed: Option<i64>,
-        float: Option<f64>,
-    },
+    Inferred(Either<BigInt, ()>),
 }
 impl NumberLiteral {
     fn inferred_of_u64(input: u64) -> NumberLiteral {
@@ -86,6 +87,26 @@ impl TryFrom<u64> for LiteralWidth {
     }
 }
 
+impl From<IntegerWidth> for LiteralWidth {
+    fn from(value: IntegerWidth) -> Self {
+        match value {
+            IntegerWidth::_8 => LiteralWidth::_8,
+            IntegerWidth::_16 => LiteralWidth::_16,
+            IntegerWidth::_32 => LiteralWidth::_32,
+            IntegerWidth::_64 => LiteralWidth::_64,
+        }
+    }
+}
+
+impl From<FloatWidth> for LiteralWidth {
+    fn from(value: FloatWidth) -> Self {
+        match value {
+            FloatWidth::_32 => LiteralWidth::_32,
+            FloatWidth::_64 => LiteralWidth::_64,
+        }
+    }
+}
+
 pub type LiteralWidthResult = Result<LiteralWidth, LiteralWidthError>;
 pub type NumberLiteralResult = Result<NumberLiteral, NumberLiteralError>;
 
@@ -110,7 +131,7 @@ where T: PrimInt {
 
 static NUMBER_REGEX: OnceLock<Regex> = OnceLock::new();
 
-pub fn parse_complex_number(input: &str) -> NumberLiteralResult {
+pub fn parse_complex_number(_rodeo: &mut Rodeo, input: &str) -> NumberLiteralResult {
     let Some(captures) = NUMBER_REGEX
         .get_or_init(|| Regex::new(r"^(0x|0b|0o)?(\w+?(?:\.\w+?)*)?(?:([uif])(\d+))?$").unwrap())
         .captures(input)
@@ -148,40 +169,20 @@ pub fn parse_complex_number(input: &str) -> NumberLiteralResult {
             )
         });
     // ((is_negative, has_minus), (radix, value, num_type_width))
-    // for the time being, the negative part could be handled with this parser later
+    // TODO: for the time being, the negative part could be handled with this parser later
     let is_negative = false;
-    let has_minus = false;
+    // let has_minus = false;
 
     let mut number_part = value.replace('_', "");
     if is_negative {
         number_part = "-".to_owned() + &number_part
     }
     if num_type_width.is_none() {
-        let unsigned = if !has_minus {
-            parse_number::<u64>(&number_part, radix).ok()
-        } else {
-            None
-        };
-        let signed = parse_number::<i64>(&number_part, radix).ok();
-        let float = if radix == 10 {
-            number_part.parse::<f64>().ok()
-        } else {
-            None
-        };
-        return match (unsigned.is_some() as u8) + (signed.is_some() as u8) + (float.is_some() as u8)
-        {
-            0 => Err(NumberLiteralError::CannotInfer),
-            1 => Ok(unsigned
-                .map(NumberLiteral::inferred_of_u64)
-                .or_else(|| signed.map(NumberLiteral::inferred_of_i64))
-                .or_else(|| float.map(NumberLiteral::inferred_of_f64))
-                .unwrap()),
-            _ => Ok(NumberLiteral::Inferred {
-                unsigned,
-                signed,
-                float,
-            }),
-        };
+        return Ok(NumberLiteral::Inferred(
+            BigInt::parse_bytes(number_part.as_bytes(), radix)
+                .map(Either::Left)
+                .unwrap_or(Either::Right(())),
+        ));
     };
     let (num_type, width) = num_type_width.unwrap();
     let width = LiteralWidth::try_from(width).map_err(num_type.width_error())?;

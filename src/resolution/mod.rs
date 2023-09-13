@@ -2,7 +2,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use either::Either::{self, Left, Right};
-use lasso::Spur;
+use lasso::{Rodeo, Spur};
 
 use crate::parsing::ast::ParsedType;
 use crate::parsing::Spanned;
@@ -23,6 +23,7 @@ pub struct FileScopedNameResolver<'a> {
     pub scope_id: ScopeId,
     pub file_id: FileId,
     pub resolved_uses: &'a ResolvedUses,
+    pub rodeo: &'a Rodeo,
 }
 impl<'a> FileScopedNameResolver<'a> {
     pub fn new_with_scope(
@@ -30,6 +31,7 @@ impl<'a> FileScopedNameResolver<'a> {
         types: Rc<RefCell<TypeRegistry>>,
         dependency_id: DependencyId,
         scope_id: ScopeId,
+        rodeo: &'a Rodeo,
     ) -> FileScopedNameResolver<'a> {
         let file_id = deps
             .get_dependency_scopes(dependency_id)
@@ -54,6 +56,7 @@ impl<'a> FileScopedNameResolver<'a> {
             scope_id,
             file_id,
             resolved_uses,
+            rodeo,
         }
     }
 
@@ -62,6 +65,7 @@ impl<'a> FileScopedNameResolver<'a> {
         types: Rc<RefCell<TypeRegistry>>,
         dependency_id: DependencyId,
         file_id: FileId,
+        rodeo: &'a Rodeo,
     ) -> FileScopedNameResolver<'a> {
         let scope_id = deps
             .get_dependency_scopes(dependency_id)
@@ -86,6 +90,7 @@ impl<'a> FileScopedNameResolver<'a> {
             scope_id,
             file_id,
             resolved_uses,
+            rodeo,
         }
     }
 

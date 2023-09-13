@@ -112,7 +112,7 @@ fn main() {
             // }
             return;
         }
-        for (file_id, errs) in resolve_and_typecheck_functions(&mut workspace, dependency_id) {
+        for (file_id, errs) in resolve_and_typecheck_functions(&rodeo, &mut workspace, dependency_id) {
             is_errors = true;
             let file = workspace.project().files.file_by_id(file_id).unwrap();
             // Generate & choose some colours for each of our elements

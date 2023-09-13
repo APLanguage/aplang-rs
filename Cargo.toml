@@ -12,6 +12,7 @@ chumsky = { git = "https://github.com/zesterer/chumsky.git", rev = "56762fe5c965
 ] }
 walkdir = { git = "https://github.com/APLanguage/walkdir.git" }
 # chumsky = { version = "1.0.0-alpha.4", features = ["label"] }
+num = "0.4.1"
 num-traits = "0.2"
 # num-derive = "0.3"
 regex = "1.9"

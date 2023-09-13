@@ -4,13 +4,14 @@ use slotmap::{new_key_type, SlotMap};
 
 use crate::{
     parsing::{
+        self,
         ast::expressions::StringLiteral,
-        parsers::number::NumberLiteralResult,
+        parsers::{number::NumberLiteralError, self},
         tokenizer::{Operation, OperationGroup},
         Infoable, Infoed, Spanned,
     },
     project::{DependencyId, FunctionId, StructId, VariableId},
-    typing::TypeId,
+    typing::{FloatWidth, IntegerWidth, TypeId},
 };
 
 new_key_type! { pub struct LocalVarId; }
@@ -43,7 +44,7 @@ pub enum CallKind {
 pub enum AssignableTarget {
     Var(TypeId, VariableType),
     StructField(TypeId, DependencyId, StructId, usize),
-    Unnassignable
+    Unnassignable,
 }
 
 #[derive(Debug, PartialEq)]
@@ -53,7 +54,7 @@ pub enum Expression {
         then: Box<Infoed<Expression>>,
         other: Box<Infoed<Expression>>,
     },
-    Number(NumberLiteralResult),
+    Number(Result<NumberLiteral, NumberLiteralError>),
     StringLiteral(StringLiteral),
     Bool(bool),
     CallChain {
@@ -122,4 +123,27 @@ impl Infoable for Expression {
 
 impl Infoable for CallKind {
     type Info = TypeId;
+}
+
+#[derive(Debug, Clone, PartialEq, PartialOrd)]
+pub enum NumberLiteral {
+    Float(f64, FloatWidth),
+    Integer(bool, i128, IntegerWidth),
+}
+
+impl From<parsing::parsers::number::NumberLiteral> for NumberLiteral {
+    fn from(value: parsing::parsers::number::NumberLiteral) -> Self {
+        match value {
+            parsers::number::NumberLiteral::Unsigned(n, w) => {
+                NumberLiteral::Integer(false, n as i128, w.into())
+            }
+            parsers::number::NumberLiteral::Signed(n, w) => {
+                NumberLiteral::Integer(true, n as i128, w.into())
+            }
+            parsers::number::NumberLiteral::Float(n, w) => NumberLiteral::Float(n, w.into()),
+            parsers::number::NumberLiteral::Inferred(_) => {
+                panic!("Cannot transform inferred number")
+            }
+        }
+    }
 }
