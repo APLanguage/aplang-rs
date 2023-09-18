@@ -179,6 +179,7 @@ impl TypeRegistry {
             },
         )
     }
+    
     pub fn display_primitive_type(ty: PrimitiveType) -> &'static str {
         use PrimitiveType::*;
         match ty {

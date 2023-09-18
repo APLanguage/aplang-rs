@@ -16,7 +16,7 @@ use crate::{
     project::{
         display_integer_type,
         readers::{read_workspace, ReadWorkspaceError, ReadWorkspaceResult},
-        Workspace,
+        Workspace, TypeRegistry,
     },
     resolution::{
         name_resolution::resolve_workspace_outlines,
@@ -351,6 +351,28 @@ fn main() {
                         .with_label(ariadne::Label::new(
                             (&input_name as &str, span.into_range())
                         ).with_message("This is not a field.").with_color(ariadne::Color::Red)),
+                    NumberCouldntInferInto(ty, span) => {
+                        let ty_color = ariadne::Color::Red;
+                        let ty_str = TypeRegistry::display_primitive_type(ty).fg(ty_color);
+                        rep.with_message(format!("Couldn't parse number to be inferred as `{ty_str}`"))
+                        .with_label(ariadne::Label::new(
+                            (&input_name as &str, span.into_range())
+                        ).with_message(format!("This number cannot be parsed as `{ty_str}`")).with_color(ariadne::Color::Red))
+                    },
+                    NumberCouldntBeDowncasted(ty, span, w) => {
+                        let ty_color = ariadne::Color::Green;
+                        let ty_str = TypeRegistry::display_primitive_type(ty).fg(ty_color);
+                        let bitlength_str = format!("{}", w as u8).fg(colors.next());
+                        rep.with_message(format!("The number parsed is of higher bitlength ({bitlength_str}) than the expected type `{ty_str}`.", ))
+                        .with_label(ariadne::Label::new(
+                            (&input_name as &str, span.into_range())
+                        ).with_message(format!("This is parsed as of bitlength `{bitlength_str}`, but expected `{ty_str}`")).with_color(ariadne::Color::Red))
+
+                    },
+                    NumberCouldntBeParsedToDefault(span) => rep
+                        .with_message("Couldn't parse number")
+                        .with_label(ariadne::Label::new((&input_name as &str, span.into_range()))
+                            .with_message("Couldn't be parsed as number.").with_color(ariadne::Color::Red)),
                 }
                 .finish()
                 .print((&input_name as &str, ariadne::Source::from(file.src())))

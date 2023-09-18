@@ -46,5 +46,5 @@ fn main() {
     e = person.address.b
     var a = 1
     var b: u32 = 1
-    var c: u8 = 1
+    var c: u8 = 256
 }
