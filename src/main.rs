@@ -370,7 +370,7 @@ fn main() {
 
                     },
                     NumberCouldntBeParsedToDefault(span) => rep
-                        .with_message("Couldn't parse number")
+                        .with_message("Couldn't parse number.")
                         .with_label(ariadne::Label::new((&input_name as &str, span.into_range()))
                             .with_message("Couldn't be parsed as number.").with_color(ariadne::Color::Red)),
                 }

@@ -4,11 +4,13 @@
 // TODO: remove all 3
 use std::{collections::HashMap, ops::ControlFlow, vec::Vec};
 
+use bigdecimal::BigDecimal;
 use chumsky::span::{SimpleSpan, Span};
 use either::Either;
 use itertools::{FoldWhile, Itertools};
 use lasso::{Rodeo, Spur};
 use num::BigInt;
+use num_traits::ToPrimitive;
 use paste::paste;
 use slotmap::SlotMap;
 
@@ -24,7 +26,7 @@ use crate::{
         Workspace,
     },
     resolution::fir::AssignableTarget,
-    typing::{self, typedast::Variable, IntegerWidth, PrimitiveType, Type, TypeId},
+    typing::{self, typedast::Variable, FloatWidth, IntegerWidth, PrimitiveType, Type, TypeId},
 };
 
 use super::{
@@ -103,7 +105,7 @@ pub enum TypeResError {
     ExpectedStructForCallChain(TypeId, SimpleSpan),
     VariableExpectedForAssignment(SimpleSpan),
     NumberCouldntInferInto(PrimitiveType, SimpleSpan),
-    NumberCouldntBeDowncasted(PrimitiveType, SimpleSpan, IntegerWidth),
+    NumberCouldntBeDowncasted(PrimitiveType, SimpleSpan, LiteralWidth),
     NumberCouldntBeParsedToDefault(SimpleSpan),
 }
 
@@ -529,105 +531,169 @@ impl<'a> ResolutionEnv<'a> {
                 fir::NumberLiteral::Float(*n, (*w).into()),
             ),
             parsers::number::NumberLiteral::Inferred(int) => {
-                let int = int.as_ref().expect_left("TODO: floats");
-                let Some((
-                    try_to_be_ty_id,
-                    try_to_be @ (PrimitiveType::Float(_) | PrimitiveType::Integer(_, _)),
-                )) = try_to_be.and_then(|t| {
-                    self.resolver
-                        .type_registery
-                        .borrow()
-                        .get_as_primitive(t)
-                        .map(|t2| (t, t2))
-                })
-                else {
-                    let Some((i, w)) = TryInto::<i32>::try_into(int)
-                        .map(|i| (i as i64, LiteralWidth::_32))
-                        .or_else(|_| TryInto::<i64>::try_into(int).map(|i| (i, LiteralWidth::_64)))
-                        .ok()
-                    else {
-                        self.add_error(TypeResError::NumberCouldntBeParsedToDefault(span), span);
-                        return (
-                            self.resolve_primitive(PrimitiveType::Integer(true, IntegerWidth::_32)),
-                            fir::Expression::Number(Err(
-                                parsers::number::NumberLiteralError::Error,
-                            )),
-                        );
-                    };
-                    return (
-                        self.resolve_primitive(PrimitiveType::Integer(true, w.into())),
-                        fir::Expression::Number(Ok(fir::NumberLiteral::Integer(
-                            true,
-                            i as i128,
-                            w.into(),
-                        ))),
-                    );
-                };
-
-                macro_rules! try_parse {
-                    ($s:ident) => {
-                        paste! {
-                            TryInto::<[<$s 8>]>::try_into(int)
-                                .map(|i| (i as [<$s 64>], LiteralWidth::_8))
-                                .or_else(|_| {
-                                    TryInto::<[<$s 16>]>::try_into(int)
-                                        .map(|i| (i as [<$s 64>], LiteralWidth::_16))
-                                })
-                                .or_else(|_| {
-                                    TryInto::<[<$s 32>]>::try_into(int)
-                                        .map(|i| (i as [<$s 64>], LiteralWidth::_32))
-                                })
-                                .or_else(|_| {
-                                    TryInto::<[<$s 64>]>::try_into(int).map(|i| (i, LiteralWidth::_64))
-                                })
-                        }
-                    };
-                }
-                match try_to_be {
-                    PrimitiveType::Integer(s, w) => {
-                        let (p_i, p_w) = if s {
-                            let Ok((i, w)) = try_parse!(i) else {
-                                self.add_error(
-                                    TypeResError::NumberCouldntInferInto(try_to_be, span),
-                                    span,
-                                );
-                                return (
-                                    try_to_be_ty_id,
-                                    fir::Expression::Number(Ok(lit.to_owned().into())),
-                                );
-                            };
-                            (i as i128, IntegerWidth::from(w))
-                        } else {
-                            let Ok((i, w)) = try_parse!(u) else {
-                                self.add_error(
-                                    TypeResError::NumberCouldntInferInto(try_to_be, span),
-                                    span,
-                                );
-                                return (
-                                    try_to_be_ty_id,
-                                    fir::Expression::Number(Ok(lit.to_owned().into())),
-                                );
-                            };
-                            (i as i128, IntegerWidth::from(w))
-                        };
-                        println!("{w:?} {p_w:?}");
-                        if w < p_w {
-                            self.add_error(
-                                TypeResError::NumberCouldntBeDowncasted(try_to_be, span, p_w),
-                                span,
-                            );
-                        }
-                        (
-                            self.resolve_primitive(PrimitiveType::Integer(s, w.max(p_w))),
-                            fir::NumberLiteral::Integer(s, p_i, p_w),
-                        )
+                return match int.as_ref() {
+                    Either::Left(int) => self.resolve_number_literal_int(int, try_to_be, span, lit),
+                    Either::Right(float) => {
+                        dbg!(self.resolve_number_literal_float(float, try_to_be, span, lit))
                     }
-                    PrimitiveType::Float(w) => todo!("PrimitiveType::Float({w:?})"),
-                    _ => unreachable!(),
                 }
+                .right_or_else(|(ty, lit)| (ty, fir::Expression::Number(Ok(lit))))
             }
         };
         (ty, fir::Expression::Number(Ok(lit)))
+    }
+
+    fn resolve_number_literal_int(
+        &mut self,
+        int: &BigInt,
+        try_to_be: Option<TypeId>,
+        span: SimpleSpan,
+        lit: &parsers::number::NumberLiteral,
+    ) -> Either<(TypeId, fir::NumberLiteral), (TypeId, fir::Expression)> {
+        let Some((
+            try_to_be_ty_id,
+            try_to_be @ (PrimitiveType::Float(_) | PrimitiveType::Integer(_, _)),
+        )) = try_to_be.and_then(|t| {
+            self.resolver
+                .type_registery
+                .borrow()
+                .get_as_primitive(t)
+                .map(|t2| (t, t2))
+        })
+        else {
+            let Some((i, w)) = TryInto::<i32>::try_into(int)
+                .map(|i| (i as i64, LiteralWidth::_32))
+                .or_else(|_| TryInto::<i64>::try_into(int).map(|i| (i, LiteralWidth::_64)))
+                .ok()
+            else {
+                self.add_error(TypeResError::NumberCouldntBeParsedToDefault(span), span);
+                return Either::Right((
+                    self.resolve_primitive(PrimitiveType::Integer(true, IntegerWidth::_32)),
+                    fir::Expression::Number(Err(parsers::number::NumberLiteralError::Error)),
+                ));
+            };
+            return Either::Right((
+                self.resolve_primitive(PrimitiveType::Integer(true, w.into())),
+                fir::Expression::Number(Ok(fir::NumberLiteral::Integer(true, i as i128, w.into()))),
+            ));
+        };
+        macro_rules! try_parse {
+            ($s:ident) => {
+                paste! {
+                    TryInto::<[<$s 8>]>::try_into(int)
+                        .map(|i| (i as [<$s 64>], LiteralWidth::_8))
+                        .or_else(|_| {
+                            TryInto::<[<$s 16>]>::try_into(int)
+                                .map(|i| (i as [<$s 64>], LiteralWidth::_16))
+                        })
+                        .or_else(|_| {
+                            TryInto::<[<$s 32>]>::try_into(int)
+                                .map(|i| (i as [<$s 64>], LiteralWidth::_32))
+                        })
+                        .or_else(|_| {
+                            TryInto::<[<$s 64>]>::try_into(int).map(|i| (i, LiteralWidth::_64))
+                        })
+                }
+            };
+        }
+        Either::Left(match try_to_be {
+            PrimitiveType::Integer(s, w) => {
+                let (p_i, p_w) = if s {
+                    let Ok((i, w)) = try_parse!(i) else {
+                        self.add_error(TypeResError::NumberCouldntInferInto(try_to_be, span), span);
+                        return Either::Right((
+                            try_to_be_ty_id,
+                            fir::Expression::Number(Ok(lit.to_owned().into())),
+                        ));
+                    };
+                    (i as i128, IntegerWidth::from(w))
+                } else {
+                    let Ok((i, w)) = try_parse!(u) else {
+                        self.add_error(TypeResError::NumberCouldntInferInto(try_to_be, span), span);
+                        return Either::Right((
+                            try_to_be_ty_id,
+                            fir::Expression::Number(Ok(lit.to_owned().into())),
+                        ));
+                    };
+                    (i as i128, IntegerWidth::from(w))
+                };
+                if w < p_w {
+                    self.add_error(
+                        TypeResError::NumberCouldntBeDowncasted(try_to_be, span, p_w.into()),
+                        span,
+                    );
+                }
+                (
+                    self.resolve_primitive(PrimitiveType::Integer(s, w.max(p_w))),
+                    fir::NumberLiteral::Integer(s, p_i, p_w),
+                )
+            }
+            PrimitiveType::Float(w) => todo!("PrimitiveType::Float({w:?})"),
+            _ => unreachable!(),
+        })
+    }
+
+    fn resolve_number_literal_float(
+        &mut self,
+        float: &BigDecimal,
+        try_to_be: Option<TypeId>,
+        span: SimpleSpan,
+        lit: &parsers::number::NumberLiteral,
+    ) -> Either<(TypeId, fir::NumberLiteral), (TypeId, fir::Expression)> {
+        let Some((
+            try_to_be_ty_id,
+            try_to_be @ (PrimitiveType::Float(_) | PrimitiveType::Integer(_, _)),
+        )) = try_to_be.and_then(|t| {
+            self.resolver
+                .type_registery
+                .borrow()
+                .get_as_primitive(t)
+                .map(|t2| (t, t2))
+        })
+        else {
+            let Some((i, w)) = float
+                .to_f32()
+                .map(|i| (i as f64, LiteralWidth::_32))
+                .or_else(|| float.to_f64().map(|i| (i, LiteralWidth::_64)))
+            else {
+                self.add_error(TypeResError::NumberCouldntBeParsedToDefault(span), span);
+                return Either::Right((
+                    self.resolve_primitive(PrimitiveType::Float(FloatWidth::_32)),
+                    fir::Expression::Number(Err(parsers::number::NumberLiteralError::Error)),
+                ));
+            };
+            return Either::Right((
+                self.resolve_primitive(PrimitiveType::Float(w.into())),
+                fir::Expression::Number(Ok(fir::NumberLiteral::Float(i, w.into()))),
+            ));
+        };
+        Either::Left(match try_to_be {
+            PrimitiveType::Integer(s, w) => todo!("PrimitiveType::Integer({s}, {w:?})"),
+            PrimitiveType::Float(w) => {
+                let Some((p_f, p_w)) = float
+                    .to_f32()
+                    .map(|i| (i as f64, FloatWidth::_32))
+                    .or_else(|| float.to_f64().map(|i| (i, FloatWidth::_64)))
+                else {
+                    self.add_error(TypeResError::NumberCouldntInferInto(try_to_be, span), span);
+                    return Either::Right((
+                        try_to_be_ty_id,
+                        fir::Expression::Number(Ok(lit.to_owned().into())),
+                    ));
+                };
+                if w < p_w {
+                    self.add_error(
+                        TypeResError::NumberCouldntBeDowncasted(try_to_be, span, p_w.into()),
+                        span,
+                    );
+                }
+                (
+                    self.resolve_primitive(PrimitiveType::Float(w.max(p_w))),
+                    fir::NumberLiteral::Float(p_f, p_w),
+                )
+            }
+            _ => unreachable!(),
+        })
     }
 
     fn resolve_operation_chain(

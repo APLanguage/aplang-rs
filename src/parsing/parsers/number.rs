@@ -1,8 +1,10 @@
 use std::{
     num::{ParseFloatError, ParseIntError},
+    str::FromStr,
     sync::OnceLock,
 };
 
+use bigdecimal::{num_bigint::ParseBigIntError, BigDecimal, ParseBigDecimalError};
 use either::Either;
 use lasso::Rodeo;
 use num::BigInt;
@@ -23,7 +25,7 @@ pub enum NumberLiteral {
     Unsigned(u64, LiteralWidth),
     Signed(i64, LiteralWidth),
     Float(f64, LiteralWidth),
-    Inferred(Either<BigInt, ()>),
+    Inferred(Either<BigInt, BigDecimal>),
 }
 impl NumberLiteral {
     fn inferred_of_u64(input: u64) -> NumberLiteral {
@@ -114,6 +116,8 @@ pub type NumberLiteralResult = Result<NumberLiteral, NumberLiteralError>;
 pub enum NumberLiteralError {
     ParseInt(ParseIntError, Option<(LiteralType, LiteralWidth)>),
     ParseFloat(ParseFloatError, Option<(LiteralType, LiteralWidth)>),
+    ParseBigInt(ParseBigIntError, Option<(LiteralType, LiteralWidth)>),
+    ParseBigFloat(ParseBigDecimalError, Option<(LiteralType, LiteralWidth)>),
     UnsignedIntWidthError(LiteralWidthError),
     SignedIntWidthError(LiteralWidthError),
     FloatWidthError(LiteralWidthError),
@@ -178,11 +182,16 @@ pub fn parse_complex_number(_rodeo: &mut Rodeo, input: &str) -> NumberLiteralRes
         number_part = "-".to_owned() + &number_part
     }
     if num_type_width.is_none() {
-        return Ok(NumberLiteral::Inferred(
-            BigInt::parse_bytes(number_part.as_bytes(), radix)
+        return if number_part.contains('.') {
+            BigDecimal::from_str(&number_part)
+                .map(Either::Right)
+                .map_err(|err| NumberLiteralError::ParseBigFloat(err, None))
+        } else {
+            BigInt::from_str_radix(&number_part, radix)
                 .map(Either::Left)
-                .unwrap_or(Either::Right(())),
-        ));
+                .map_err(|err| NumberLiteralError::ParseBigInt(err, None))
+        }
+        .map(NumberLiteral::Inferred);
     };
     let (num_type, width) = num_type_width.unwrap();
     let width = LiteralWidth::try_from(width).map_err(num_type.width_error())?;
