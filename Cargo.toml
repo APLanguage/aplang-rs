@@ -28,7 +28,7 @@ indextree = "4.6"
 slotmap = "1.0.6"
 ariadne = { git = "https://github.com/APLanguage/ariadne.git", rev = "bdc392368fb45e71aff0feca58d0bf66f56698ae" }
 itertools = "0.11"
-toml = "0.7.6"
+toml = "0.8.0"
 serde = { version = "1.0", features = ["derive"] }
 same-file = "1.0.6"
 strum = "0.25"
