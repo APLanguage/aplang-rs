@@ -936,6 +936,7 @@ impl<'a> ResolutionEnv<'a> {
                 _,
                 (Some(PrimitiveType::Float(w1)), Some(PrimitiveType::Float(w2))),
             ) => self.resolve_primitive(PrimitiveType::Float(w1.max(w2))),
+            (Logic, _, (Some(PrimitiveType::Boolean), Some(PrimitiveType::Boolean))) => lhs.info,
             (_, _, (Some(lhs), Some(rhs))) => todo!(
                 "resolve_binary/other ops: {}, {}, PrimitiveType::{} and PrimitiveType::{}",
                 group,

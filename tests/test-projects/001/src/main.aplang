@@ -39,7 +39,7 @@ fn main() {
     val person = Person(r"Amejonah", 42u8, Address(r"a", 12u16))
     test_person(person)
     val test = person.a
-    if(1u16) while(1u16) {}
+    if(true || false) while(1u16) {}
     while(1u16) {}
     test_wrong_return(r"6es6") = 0u16
     b.a.b = test_wrong_return(16u16)
