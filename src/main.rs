@@ -4,6 +4,7 @@
 #![feature(trait_alias)]
 #![feature(return_position_impl_trait_in_trait)]
 #![feature(iter_collect_into)]
+// #![feature(iter_map_windows)]
 
 use std::{ops::Range, path::Path};
 

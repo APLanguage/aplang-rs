@@ -3,8 +3,9 @@ use chumsky::{
     recursive::recursive,
     select,
     span::SimpleSpan,
-    Parser,
+    IterParser, Parser, prelude::Rich,
 };
+use itertools::Itertools;
 
 use crate::parsing::{
     ast::expressions::{CallKind, Expression},
@@ -241,7 +242,18 @@ macro_rules! binary_parser {
 #[rustfmt::skip] binary_parser!(operation_chain, comparison, term, ops_parser!(GreaterEqual, LessEqual, Greater, Less));
 #[rustfmt::skip] binary_parser!(binary, term, factor, ops_parser!(Plus, Minus)); // TODO: Newline split
 #[rustfmt::skip] binary_parser!(binary, factor, bitops, ops_parser!(Asterisk, SlashSlash, Slash, Percent));
-#[rustfmt::skip] binary_parser!(binary, bitops, unary, ops_parser!(Bar, Ampersand, GreaterGreater, LessLess, GreaterGreaterGreater));
+#[rustfmt::skip] binary_parser!(binary, bitops, unary, ops_parser!(Bar, Ampersand, LessLess)
+    .or(
+        just(Token::Greater).span().repeated().at_least(2).at_most(3).collect_boxed_slice()
+        .try_map(|slice, _span|
+            if slice.iter().tuple_windows().all(|(a, b)| a.end == b.start) {
+                Ok(if slice.len() == 2 { Operation::ShiftRight } else { Operation::ShiftRightUnsigned })
+            } else {
+                Err(Rich::custom(_span, "there is a whitespace between the two/three >"))
+            }
+        )
+    )
+);
 
 pub fn operation_chain_parser<'a, NP, OP, I: TokenInput<'a>>(
     next_parser: NP,

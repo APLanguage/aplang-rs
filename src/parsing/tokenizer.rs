@@ -85,12 +85,12 @@ pub enum Token {
     #[token("^")]
     Circumflex,
 
-    #[token(">>")]
-    GreaterGreater,
+    // #[token(">>")]
+    // GreaterGreater,
     #[token("<<")]
     LessLess,
-    #[token(">>>")]
-    GreaterGreaterGreater,
+    // #[token(">>>")]
+    // GreaterGreaterGreater,
 
     #[token("&&")]
     AmpersandAmpersand,
@@ -251,9 +251,9 @@ impl From<Token> for Operation {
             Ampersand => AndBitwise,
             Bar => OrBitwise,
             Circumflex => XOR,
-            GreaterGreater => ShiftRight,
+            // GreaterGreater => ShiftRight,
             LessLess => ShiftLeft,
-            GreaterGreaterGreater => ShiftRightUnsigned,
+            // GreaterGreaterGreater => ShiftRightUnsigned,
             AmpersandAmpersand => And,
             BarBar => Or,
             Token::Greater => Operation::Greater,
