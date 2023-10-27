@@ -36,4 +36,4 @@ strum_macros = "0.25"
 bigdecimal = { git = "https://github.com/APLanguage/bigdecimal-rs.git", rev = "864927641721a39299e460deebdc85d01ea0930b" }
 
 [target.'cfg(windows)'.dependencies.winapi-util]
-version = "0.1.5"
+version = "0.1.6"
