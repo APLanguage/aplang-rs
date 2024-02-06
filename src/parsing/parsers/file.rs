@@ -4,7 +4,6 @@ use chumsky::{
     prelude::Rich,
     primitive::{choice, just},
     recursive::recursive,
-    span::SimpleSpan,
     IterParser, Parser,
 };
 use either::Either;
@@ -49,8 +48,10 @@ pub fn use_parser<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, UseDeclara
             .separated_by(just(Token::Minus))
             .at_least(1)
             .ignored()
-            .src().boxed()
-            .validate(|s, span: SimpleSpan, emitter| {
+            .src()
+            .boxed()
+            .validate(|s: &'a str, extra, emitter| {
+                let span = extra.span();
                 if s.chars().any(|c: char| c.is_whitespace()) {
                     emitter.emit(Rich::custom(span, "No whitespaces are allowed. Should match [a-zA-Z][a-zA-Z0-9]*(-[a-zA-Z0-9]+)*"))
                 }

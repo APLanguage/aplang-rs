@@ -122,7 +122,7 @@ fn return_parser<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, ControlFlow
     keyword(Identifier::Return)
         .ignore_then(
             expression_parser()
-                .map_with_span(Spanned)
+                .spanned()
                 .paddedln()
                 .or_not()
                 .labelled("return-expr")

@@ -5,8 +5,8 @@ use slotmap::SlotMap;
 
 use super::{
     readers::{read_project_from_files, ReadProjectResult},
-    scopes::{Scopes, ScopeType},
-    Files, Project, VirtualFile, DependencyId, TypeRegistry,
+    scopes::{ScopeType, Scopes},
+    DependencyId, Files, Project, ProjectLink, TypeRegistry, VirtualFile,
 };
 
 const STD_LIB_SRC: &str = r##"
@@ -17,7 +17,11 @@ fn str(input: u32) -> str {}
 fn str(input: u64) -> str {}
 "##;
 
-pub fn create_std_lib(dependency_id: DependencyId, rodeo: &mut Rodeo, types: &mut TypeRegistry) -> Project {
+pub fn create_std_lib(
+    dependency_id: DependencyId,
+    rodeo: &mut Rodeo,
+    types: &mut TypeRegistry,
+) -> Project {
     let mut files = Files {
         files: SlotMap::with_key(),
     };
@@ -26,9 +30,18 @@ pub fn create_std_lib(dependency_id: DependencyId, rodeo: &mut Rodeo, types: &mu
         src: STD_LIB_SRC.to_owned(),
         path: Path::new("std/std.aplang").into(),
     }));
-    scopes.add(scopes.root_id(), ScopeType::File(rodeo.get_or_intern_static("std"), file_id));
+    scopes.add(
+        scopes.root_id(),
+        ScopeType::File(rodeo.get_or_intern_static("std"), file_id),
+    );
 
-    match read_project_from_files(dependency_id, rodeo, files, scopes, types) {
+    match read_project_from_files(
+        ProjectLink::Dependency(dependency_id),
+        rodeo,
+        files,
+        scopes,
+        types,
+    ) {
         ReadProjectResult::Err(_, _) => panic!("The std should compile!"),
         ReadProjectResult::Ok(p) => p,
     }

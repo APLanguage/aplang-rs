@@ -22,8 +22,8 @@ use crate::{
         Infoed, Spanned,
     },
     project::{
-        DeclarationInfo, DeclarationResolutionStage, DependencyId, FileId, FunctionId, StructId,
-        Workspace,
+        DeclarationInfo, DeclarationResolutionStage, DependencyId, FileId, FunctionId, ProjectLink,
+        StructId, StructLink, Workspace,
     },
     resolution::fir::AssignableTarget,
     typing::{self, typedast::Variable, FloatWidth, IntegerWidth, PrimitiveType, Type, TypeId},
@@ -38,21 +38,18 @@ use super::{
 pub fn resolve_and_typecheck_functions(
     rodeo: &Rodeo,
     workspace: &mut Workspace,
-    dependency_id: DependencyId,
+    project_link: ProjectLink,
 ) -> HashMap<FileId, Vec<Spanned<TypeResError>>> {
     let workspace_read: &Workspace = workspace;
     let mut errors = HashMap::new();
     for (func_id, func_info) in workspace_read
-        .dependencies
-        .get_dependency(dependency_id)
-        .unwrap()
-        .project
+        .get_project(project_link)
         .pool
         .functions
         .iter()
     {
         let (func, errs) = resolve_function(
-            workspace_read.resolver_by_file(rodeo, dependency_id, func_info.file_id),
+            workspace_read.resolver_by_file(rodeo, project_link, func_info.file_id),
             func_id,
             func_info,
         );
@@ -84,7 +81,7 @@ fn resolve_function(
 pub enum TypeResError {
     FunctionNotFound(Spanned<Spur>, Vec<Spanned<TypeId>>),
     VariableNotFound(Spanned<Spur>, Option<TypeId>),
-    FieldNotFound(Spanned<(DependencyId, StructId)>, Spanned<Spur>),
+    FieldNotFound(Spanned<StructLink>, Spanned<Spur>),
     TypesAreNotMatching(TypesAreNotMatchingContext, Spanned<TypeId>, Spanned<TypeId>),
     SignNotMatching(
         Spanned<(bool, IntegerWidth)>,
@@ -283,7 +280,7 @@ impl<'a> ResolutionEnv<'a> {
         let mut this = base.info;
         let mut the_calls: Vec<Infoed<fir::CallKind>> = vec![];
         for call in calls.iter() {
-            let Some((dep, struct_id)) = self.resolver.type_registery.borrow().get_as_struct(this)
+            let Some(struct_link) = self.resolver.type_registery.borrow().get_as_struct(this)
             else {
                 let last_span = the_calls
                     .last()
@@ -311,11 +308,11 @@ impl<'a> ResolutionEnv<'a> {
             let Spanned(CallKind::Identifier(Spanned(name, _)), span) = call else {
                 todo!("Expression::CallChain/methods")
             };
-            let Some(fid) = self.find_field_in_struct(dep, struct_id, *name) else {
+            let Some(fid) = self.find_field_in_struct(struct_link, *name) else {
                 self.add_error(
                     TypeResError::FieldNotFound(
                         Spanned(
-                            (dep, struct_id),
+                            struct_link,
                             the_calls
                                 .last()
                                 .map(|i| i.span)
@@ -340,25 +337,21 @@ impl<'a> ResolutionEnv<'a> {
                     },
                 );
             };
+            let StructLink {
+                struct_id,
+                project_link,
+            } = struct_link;
             this = self.resolver
-            .dependencies
-            .get_dependency(dep)
-            .and_then(|dep| {
-                Some(
-                    dep.project
+            .workspace.get_project(project_link)
                         .pool
                         .structs
-                        .get(struct_id)?
-                        .decl
-                        .outline
-                        .as_ref()?
-                        .fields
-                        .get(fid)?
-                        .unwrap_or_else(|t| t),
-                )
-            }).expect("should have been resolved and the field id of both ast and outline should match");
+                        .get(struct_id)
+                        .and_then(|s| s.decl.outline.as_ref())
+                        .and_then(|d|d.fields.get(fid))
+                        .expect("should have been resolved and the field id of both ast and outline should match")
+                        .unwrap_or_else(|t| t);
             the_calls.push(Infoed {
-                inner: fir::CallKind::StructField(dep, struct_id, fid),
+                inner: fir::CallKind::StructField(struct_link, fid),
                 info: this,
                 span: *span,
             });
@@ -375,17 +368,14 @@ impl<'a> ResolutionEnv<'a> {
         )
     }
 
-    fn find_field_in_struct(
-        &mut self,
-        dep: DependencyId,
-        struct_id: StructId,
-        name: Spur,
-    ) -> Option<usize> {
+    fn find_field_in_struct(&mut self, struct_link: StructLink, name: Spur) -> Option<usize> {
+        let StructLink {
+            struct_id,
+            project_link,
+        } = struct_link;
         self.resolver
-            .dependencies
-            .get_dependency(dep)
-            .unwrap()
-            .project
+            .workspace
+            .get_project(project_link)
             .pool
             .structs
             .get(struct_id)
@@ -440,7 +430,7 @@ impl<'a> ResolutionEnv<'a> {
                     .map(|Spanned(expr, span)| self.resolve_expression(None, expr, *span))
                     .collect_vec()
                     .into_boxed_slice();
-                let Some((dep, f_or_s_id, ret_ty)) = self
+                let Some((project_link, f_or_s_id, ret_ty)) = self
                     .find_callable(
                         identifier.0,
                         &parameters.iter().map(|i| i.info).collect_vec(),
@@ -479,7 +469,7 @@ impl<'a> ResolutionEnv<'a> {
                     }),
                     fir::Expression::Call(Spanned(
                         fir::CallKind::Function {
-                            dependency_id: dep,
+                            project_link,
                             f_or_s_id,
                             parameters,
                         },
@@ -734,7 +724,7 @@ impl<'a> ResolutionEnv<'a> {
         parameters: &'b [TypeId],
     ) -> impl Iterator<
         Item = (
-            DependencyId,
+            ProjectLink,
             Either<FunctionId, StructId>,
             Option<Result<TypeId, TypeId>>,
         ),
@@ -742,7 +732,7 @@ impl<'a> ResolutionEnv<'a> {
         let iter =
             self.resolver
                 .resolve_callable(identifier)
-                .filter_map(move |(dep, f_or_s_id)| {
+                .filter_map(move |(project_link, f_or_s_id)| {
                     let (resolved_parameters, ret_ty) = match f_or_s_id {
                         Either::Left(f_id) => {
                             let DeclarationInfo {
@@ -750,9 +740,7 @@ impl<'a> ResolutionEnv<'a> {
                                 file_id: _,
                             } = self
                                 .resolver
-                                .dependencies
-                                .get_dependency(dep)?
-                                .project
+                                .workspace.get_project(project_link)
                                 .pool
                                 .functions
                                 .get(f_id)?;
@@ -767,7 +755,7 @@ impl<'a> ResolutionEnv<'a> {
                         }
                         Either::Right(s_id) => {
                             let declaration_pool =
-                                &self.resolver.dependencies.get_dependency(dep)?.project.pool;
+                                &self.resolver.workspace.get_project(project_link).pool;
                             let DeclarationInfo {
                                 decl: DeclarationResolutionStage { outline, .. },
                                 file_id: _,
@@ -815,7 +803,7 @@ impl<'a> ResolutionEnv<'a> {
                     {
                         return None;
                     }
-                    Some((dep, f_or_s_id, ret_ty))
+                    Some((project_link, f_or_s_id, ret_ty))
                 });
         if parameters.iter().any(|type_id| {
             matches!(
@@ -937,6 +925,11 @@ impl<'a> ResolutionEnv<'a> {
                 (Some(PrimitiveType::Float(w1)), Some(PrimitiveType::Float(w2))),
             ) => self.resolve_primitive(PrimitiveType::Float(w1.max(w2))),
             (Logic, _, (Some(PrimitiveType::Boolean), Some(PrimitiveType::Boolean))) => lhs.info,
+            (
+                Bitops,
+                _,
+                (Some(PrimitiveType::Integer(s1, w1)), Some(PrimitiveType::Integer(s2, w2))),
+            ) => todo!("bitops"),
             (_, _, (Some(lhs), Some(rhs))) => todo!(
                 "resolve_binary/other ops: {}, {}, PrimitiveType::{} and PrimitiveType::{}",
                 group,
@@ -1012,7 +1005,7 @@ impl<'a> ResolutionEnv<'a> {
                 });
                 let Spanned(expr, expr_span) = &var.expression;
                 let expr = self.resolve_expression(try_to_be.map(|t| t.0), expr, *expr_span);
-                // TODO: typecheck
+                // TODO: typecheck variable expression
 
                 let ty = try_to_be
                     .map(|t| {
@@ -1069,8 +1062,8 @@ impl<'a> ResolutionEnv<'a> {
                     (
                         *last_ty,
                         match last_kind {
-                            fir::CallKind::StructField(dep, struct_id, field_id) => {
-                                AssignableTarget::StructField(*last_ty, *dep, *struct_id, *field_id)
+                            fir::CallKind::StructField(struct_link, field_id) => {
+                                AssignableTarget::StructField(*last_ty, *struct_link, *field_id)
                             }
                             fir::CallKind::Variable(var_type) => {
                                 AssignableTarget::Var(*last_ty, var_type.to_owned())

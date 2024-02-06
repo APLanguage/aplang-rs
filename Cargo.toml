@@ -7,15 +7,13 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-chumsky = { git = "https://github.com/zesterer/chumsky.git", rev = "56762fe5c965880066a068038a18b5ac07afd75c", features = [
-    "label",
-] }
+chumsky = { version = "1.0.0-alpha.6", features = [ "label" ] }
 walkdir = { git = "https://github.com/APLanguage/walkdir.git" }
 # chumsky = { version = "1.0.0-alpha.4", features = ["label"] }
 num = "0.4.1"
 num-traits = "0.2"
 # num-derive = "0.3"
-regex = "1.9"
+regex = "1.10"
 logos = "0.13"
 paste = "1.0"
 # clap = "4.1"
@@ -28,7 +26,7 @@ indextree = "4.6"
 slotmap = "1.0.6"
 ariadne = { git = "https://github.com/APLanguage/ariadne.git", rev = "bdc392368fb45e71aff0feca58d0bf66f56698ae" }
 itertools = "0.11"
-toml = "0.7.6"
+toml = "0.8.8"
 serde = { version = "1.0", features = ["derive"] }
 same-file = "1.0.6"
 strum = "0.25"
@@ -36,4 +34,4 @@ strum_macros = "0.25"
 bigdecimal = { git = "https://github.com/APLanguage/bigdecimal-rs.git", rev = "864927641721a39299e460deebdc85d01ea0930b" }
 
 [target.'cfg(windows)'.dependencies.winapi-util]
-version = "0.1.5"
+version = "0.1.6"

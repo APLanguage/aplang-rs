@@ -1,7 +1,8 @@
 use std::{fmt::Debug, ops::Range};
 
 use chumsky::{
-    extra::Full, input::ValueInput, prelude::Rich, span::SimpleSpan, IterParser, Parser,
+    container::OrderedSeq, extra::Full, input::ValueInput, prelude::Rich, primitive::just,
+    span::SimpleSpan, IterParser, Parser,
 };
 use lasso::{Rodeo, Spur};
 
@@ -87,8 +88,17 @@ where
         self.padded_by(newline().repeated())
     }
 
+    #[inline]
+    fn map_with_state<R, F: (Fn(O, SimpleSpan, &mut ParserState<'a>) -> R) + Clone>(
+        self,
+        f: F,
+    ) -> impl TokenParser<'a, I, R> {
+        self.map_with(move |t, e| f(t, e.span(), e.state()))
+    }
+
+    #[inline(always)]
     fn span(self) -> impl TokenParser<'a, I, SimpleSpan> + Clone {
-        self.map_with_span(|_, s| s)
+        self.to_span()
     }
 
     fn spur(self) -> impl TokenParser<'a, I, Spur> + Clone {
@@ -102,10 +112,10 @@ where
     }
 
     fn spanned(self) -> impl TokenParser<'a, I, Spanned<O>> + Clone {
-        self.map_with_span(Spanned)
+        self.map_with(|t, e| Spanned(t, e.span()))
     }
 
-    fn map_into<R: From<O>>(self) ->impl TokenParser<'a, I, R> + Clone {
+    fn map_into<R: From<O>>(self) -> impl TokenParser<'a, I, R> + Clone {
         self.map(Into::into)
     }
 }
@@ -116,4 +126,11 @@ where
     T: TokenParser<'a, I, O> + Clone,
     O: Debug,
 {
+}
+
+pub fn just_span<'a, T, I>(seq: T) -> impl TokenParser<'a, I, SimpleSpan>
+where
+    I: TokenInput<'a>,
+    T: OrderedSeq<'a, I::Token> + Clone, {
+    just(seq).to_span()
 }

@@ -36,6 +36,18 @@ new_key_type! { pub struct ModuleId; }
 new_key_type! { pub struct DeclarationId; }
 new_key_type! { pub struct DependencyId; }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum ProjectLink {
+    Dependency(DependencyId),
+    Project,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct StructLink {
+    pub struct_id: StructId,
+    pub project_link: ProjectLink,
+}
+
 #[derive(Default)]
 pub struct TypeRegistry {
     types: SlotMap<TypeId, Type>,
@@ -84,16 +96,13 @@ impl TypeRegistry {
         }
     }
 
-    fn create_struct(&mut self, dependency_id: DependencyId, struct_id: StructId) -> TypeId {
-        self.types.insert(Type::Data(dependency_id, struct_id))
+    fn create_struct(&mut self, struct_link: StructLink) -> TypeId {
+        self.types.insert(Type::Data(struct_link))
     }
 
-    pub fn get_declaration_from_type_id(
-        &self,
-        type_id: TypeId,
-    ) -> Option<(DependencyId, StructId)> {
+    pub fn get_declaration_from_type_id(&self, type_id: TypeId) -> Option<StructLink> {
         match self.types.get(type_id)? {
-            Type::Data(dep_id, struct_id) => Some((*dep_id, *struct_id)),
+            Type::Data(link) => Some(*link),
             _ => None,
         }
     }
@@ -127,9 +136,9 @@ impl TypeRegistry {
         })
     }
 
-    pub fn get_as_struct(&self, type_id: TypeId) -> Option<(DependencyId, StructId)> {
+    pub fn get_as_struct(&self, type_id: TypeId) -> Option<StructLink> {
         self.types.get(type_id).and_then(|t| match t {
-            Type::Data(dep, struct_id) => Some((*dep, *struct_id)),
+            Type::Data(link) => Some(*link),
             _ => None,
         })
     }
@@ -141,21 +150,18 @@ impl TypeRegistry {
             .unwrap()
     }
 
-    pub fn display_type(
-        &self,
-        rodeo: &Rodeo,
-        dependencies: &Dependencies,
-        type_id: TypeId,
-    ) -> String {
+    pub fn display_type(&self, rodeo: &Rodeo, workspace: &Workspace, type_id: TypeId) -> String {
         self.get(type_id).map_or_else(
             || "?".to_string(),
             |ty| match ty {
                 Type::PrimitiveType(ty) => Self::display_primitive_type(*ty).to_string(),
-                Type::Data(dep, struct_id) => {
-                    let dependency_info = dependencies.get_dependency(*dep).unwrap();
-                    let project_name = rodeo.resolve(&dependency_info.name);
-                    let struct_path = &dependency_info
-                        .project
+                Type::Data(StructLink {
+                    struct_id,
+                    project_link,
+                }) => {
+                    let project_name = rodeo.resolve(&workspace.get_dependency_name(*project_link));
+                    let struct_path = workspace
+                        .get_project(*project_link)
                         .struct_path(*struct_id)
                         .map(|s| rodeo.resolve(&s))
                         .join("::");
@@ -179,7 +185,7 @@ impl TypeRegistry {
             },
         )
     }
-    
+
     pub fn display_primitive_type(ty: PrimitiveType) -> &'static str {
         use PrimitiveType::*;
         match ty {
@@ -219,40 +225,29 @@ pub struct Workspace {
     pub aplang_file: APLangWorkspaceFile,
     pub dependencies: Dependencies,
     pub type_registery: Rc<RefCell<TypeRegistry>>,
-    _project: DependencyId,
+    project_name: Spur,
+    project: Project,
 }
 
 impl Workspace {
     pub fn project(&self) -> &Project {
-        &self
-            .dependencies
-            .get_dependency(self._project)
-            .unwrap()
-            .project
+        &self.project
     }
 
     pub fn project_mut(&mut self) -> &mut Project {
-        &mut self
-            .dependencies
-            .get_dependency_mut(self._project)
-            .unwrap()
-            .project
-    }
-
-    pub fn project_dep_id(&self) -> DependencyId {
-        self._project
+        &mut self.project
     }
 
     pub fn resolver_by_scope<'a>(
         &'a self,
         rodeo: &'a Rodeo,
-        dependency_id: DependencyId,
+        project_link: ProjectLink,
         scope_id: ScopeId,
     ) -> FileScopedNameResolver<'a> {
         FileScopedNameResolver::new_with_scope(
-            &self.dependencies,
+            self,
             self.type_registery.clone(),
-            dependency_id,
+            project_link,
             scope_id,
             rodeo,
         )
@@ -261,22 +256,62 @@ impl Workspace {
     pub fn resolver_by_file<'a>(
         &'a self,
         rodeo: &'a Rodeo,
-        dependency_id: DependencyId,
+        project_link: ProjectLink,
         file_id: FileId,
     ) -> FileScopedNameResolver<'a> {
         FileScopedNameResolver::new_with_file(
-            &self.dependencies,
+            self,
             self.type_registery.clone(),
-            dependency_id,
+            project_link,
             file_id,
             rodeo,
         )
     }
 
     pub fn display_type(&self, rodeo: &Rodeo, ty: TypeId) -> String {
-        self.type_registery
-            .borrow()
-            .display_type(rodeo, &self.dependencies, ty)
+        self.type_registery.borrow().display_type(rodeo, self, ty)
+    }
+
+    pub fn get_project(&self, project_link: ProjectLink) -> &Project {
+        match project_link {
+            ProjectLink::Dependency(dep_id) => {
+                self.dependencies.deps.get(dep_id).map(|d| &d.project).expect("A dependency wasn't found by DependencyId, this means it is a dead id and is a bug.")
+            }
+            ProjectLink::Project => &self.project,
+        }
+    }
+
+    pub fn get_project_mut(&mut self, project_link: ProjectLink) -> &mut Project {
+        match project_link {
+            ProjectLink::Dependency(dep_id) => self
+                .dependencies
+                .deps
+                .get_mut(dep_id)
+                .map(|d| &mut d.project).expect("A dependency wasn't found by DependencyId, this means it is a dead id and is a bug."),
+            ProjectLink::Project => &mut self.project,
+        }
+    }
+
+    pub fn get_dependency_name(&self, project_link: ProjectLink) -> Spur {
+        match project_link {
+            ProjectLink::Dependency(dep_id) => self.dependencies.deps.get(dep_id).unwrap().name,
+            ProjectLink::Project => self.project_name,
+        }
+    }
+
+    pub fn get_scopes(&self, project_link: ProjectLink) -> &Scopes {
+        &self.get_project(project_link).scopes
+    }
+
+    pub fn get_project_by_name(&self, name: &[Spur]) -> Result<ProjectLink, usize> {
+        if name.len() != 1 {
+            todo!("Dependencies#get_dependency_by_name: multi project workspaces")
+        }
+        if *name.first().unwrap() == self.project_name {
+            Ok(ProjectLink::Project)
+        } else {
+            self.dependencies.get_dependency_by_name(name)
+        }
     }
 }
 
@@ -545,13 +580,14 @@ impl Dependencies {
         id
     }
 
-    pub fn get_dependency_by_name(&self, name: &[Spur]) -> Result<DependencyId, usize> {
+    fn get_dependency_by_name(&self, name: &[Spur]) -> Result<ProjectLink, usize> {
         if name.len() != 1 {
             todo!("Dependencies#get_dependency_by_name: multi project workspaces")
         }
         self.by_name
-            .get(name.get(0).unwrap())
+            .get(name.first().unwrap())
             .map(DependencyId::clone)
+            .map(ProjectLink::Dependency)
             .ok_or(0)
     }
 
@@ -561,7 +597,7 @@ impl Dependencies {
 }
 
 pub struct ResolvedUses {
-    uses: HashMap<DependencyId, ResolvedUsesInDependency>,
+    uses: HashMap<ProjectLink, ResolvedUsesInDependency>,
     errors: Vec<SimpleSpan>,
 }
 
@@ -581,8 +617,8 @@ impl ResolvedUses {
         }
     }
 
-    pub(crate) fn add(&mut self, dependency_id: DependencyId, target: UseTarget) {
-        match self.uses.get_mut(&dependency_id) {
+    pub(crate) fn add(&mut self, project_link: ProjectLink, target: UseTarget) {
+        match self.uses.get_mut(&project_link) {
             Some(ruid) => {
                 match target {
                     UseTarget::UseTargetStar(t) => ruid.0.push(t),
@@ -590,7 +626,7 @@ impl ResolvedUses {
                 };
             }
             None => {
-                self.uses.insert(dependency_id, {
+                self.uses.insert(project_link, {
                     let (vec_star, vec_single) = match target {
                         UseTarget::UseTargetStar(t) => (vec![t], vec![]),
                         UseTarget::UseTargetSingle(t) => (vec![], vec![t]),
@@ -611,79 +647,82 @@ impl ResolvedUses {
         return self.errors.iter();
     }
 
-    pub fn find(&self, name: Spur) -> impl Iterator<Item = (DependencyId, ScopeId)> + '_ {
+    pub fn find(&self, name: Spur) -> impl Iterator<Item = (ProjectLink, ScopeId)> + '_ {
         self.find_in_single(name).chain(self.find_in_stars(name))
     }
 
-    pub fn find_in_single(&self, name: Spur) -> impl Iterator<Item = (DependencyId, ScopeId)> + '_ {
-        self.uses
-            .iter()
-            .flat_map(move |(dep_id, ResolvedUsesInDependency(_, singles))| {
+    pub fn find_in_single(&self, name: Spur) -> impl Iterator<Item = (ProjectLink, ScopeId)> + '_ {
+        self.uses.iter().flat_map(
+            move |(project_link, ResolvedUsesInDependency(_, singles))| {
                 singles
                     .iter()
                     .filter(move |t| t.alias_name.map(|n| n.0 == name).unwrap_or(t.name == name))
-                    .map(|t| (*dep_id, t.scope))
-            })
+                    .map(|t| (*project_link, t.scope))
+            },
+        )
     }
 
-    pub fn find_in_stars(&self, name: Spur) -> impl Iterator<Item = (DependencyId, ScopeId)> + '_ {
+    pub fn find_in_stars(&self, name: Spur) -> impl Iterator<Item = (ProjectLink, ScopeId)> + '_ {
         self.uses
             .iter()
-            .flat_map(move |(dep_id, ResolvedUsesInDependency(stars, _))| {
+            .flat_map(move |(project_link, ResolvedUsesInDependency(stars, _))| {
                 stars
                     .iter()
                     .flat_map(|t| t.end_targets.iter())
                     .filter_map(move |(target_name, id)| (*target_name == name).then_some(id))
-                    .map(|&id| (*dep_id, id))
+                    .map(|&id| (*project_link, id))
             })
     }
 
     pub fn find_struct<'a>(
         &'a self,
-        dependencies: &'a Dependencies,
+        workspace: &'a Workspace,
         name: Spur,
-    ) -> impl Iterator<Item = (DependencyId, ScopeId, DeclarationId, StructId, TypeId)> + '_ {
-        self.find(name)
-            .filter_map(|(dep_id, scope_id)| self.filter_finding(dependencies, dep_id, scope_id))
+    ) -> impl Iterator<Item = (ProjectLink, ScopeId, DeclarationId, StructId, TypeId)> + '_ {
+        self.find(name).filter_map(|(project_link, scope_id)| {
+            self.filter_finding(workspace, project_link, scope_id)
+        })
     }
 
     pub fn find_struct_in_single<'a>(
         &'a self,
-        dependencies: &'a Dependencies,
+        workspace: &'a Workspace,
         name: Spur,
-    ) -> impl Iterator<Item = (DependencyId, ScopeId, DeclarationId, StructId, TypeId)> + '_ {
+    ) -> impl Iterator<Item = (ProjectLink, ScopeId, DeclarationId, StructId, TypeId)> + '_ {
         self.find_in_single(name)
-            .filter_map(|(dep_id, scope_id)| self.filter_finding(dependencies, dep_id, scope_id))
+            .filter_map(|(project_link, scope_id)| {
+                self.filter_finding(workspace, project_link, scope_id)
+            })
     }
 
     pub fn find_struct_in_stars<'a>(
         &'a self,
-        dependencies: &'a Dependencies,
+        workspace: &'a Workspace,
         name: Spur,
-    ) -> impl Iterator<Item = (DependencyId, ScopeId, DeclarationId, StructId, TypeId)> + '_ {
+    ) -> impl Iterator<Item = (ProjectLink, ScopeId, DeclarationId, StructId, TypeId)> + '_ {
         self.find_in_stars(name)
-            .filter_map(|(dep_id, scope_id)| self.filter_finding(dependencies, dep_id, scope_id))
+            .filter_map(|(project_link, scope_id)| {
+                self.filter_finding(workspace, project_link, scope_id)
+            })
     }
     fn filter_finding(
         &self,
-        dependencies: &Dependencies,
-        dep_id: DependencyId,
+        workspace: &Workspace,
+        project_link: ProjectLink,
         scope_id: ScopeId,
-    ) -> Option<(DependencyId, ScopeId, DeclarationId, StructId, TypeId)> {
-        let dep_info = dependencies.get_dependency(dep_id)?;
-        let scopes = &dep_info.project.scopes;
+    ) -> Option<(ProjectLink, ScopeId, DeclarationId, StructId, TypeId)> {
+        let project = workspace.get_project(project_link);
+        let scopes = &project.scopes;
 
         let ScopeType::Declaration(_, dec_id) = scopes.scope(scope_id)? else {
             return None;
         };
 
-        let DeclarationDelegate::Struct(struct_id) =
-            dep_info.project.pool.declarations.get(*dec_id)?
-        else {
+        let DeclarationDelegate::Struct(struct_id) = project.pool.declarations.get(*dec_id)? else {
             return None;
         };
-        let type_id = dep_info.project.pool.structs.get(*struct_id)?.decl.ast.1;
-        Some((dep_id, scope_id, *dec_id, *struct_id, type_id))
+        let type_id = project.pool.structs.get(*struct_id)?.decl.ast.1;
+        Some((project_link, scope_id, *dec_id, *struct_id, type_id))
     }
 }
 

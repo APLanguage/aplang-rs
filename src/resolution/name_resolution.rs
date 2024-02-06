@@ -15,7 +15,7 @@ use crate::{
         Spanned,
     },
     project::{
-        DependencyId, FileId, FunctionId, ModuleId, ResolvedUses, StructId, UseTarget,
+        FileId, FunctionId, ModuleId, ProjectLink, ResolvedUses, StructId, UseTarget,
         UseTargetSingle, UseTargetStar, VariableId, Workspace,
     },
     typing::TypeId,
@@ -26,15 +26,11 @@ use super::FileScopedNameResolver;
 pub fn resolve_uses(
     rodeo: &mut Rodeo,
     workspace: &mut Workspace,
-    dependency_id: DependencyId,
+    project_link: ProjectLink,
 ) -> HashMap<FileId, Vec<SimpleSpan>> {
     let mut errors = HashMap::<FileId, Vec<SimpleSpan>>::new();
 
-    let project = &workspace
-        .dependencies
-        .get_dependency(dependency_id)
-        .unwrap()
-        .project;
+    let project = workspace.get_project(project_link);
     let mut resolutions = HashMap::<ModuleId, ResolvedUses>::new();
 
     for (module_id, module) in project.src.iter() {
@@ -49,7 +45,7 @@ pub fn resolve_uses(
             .src();
 
         for u in uses.iter() {
-            let dependency_id = match workspace.dependencies.get_dependency_by_name(
+            let project_link = match workspace.get_project_by_name(
                 &u.scope
                     .iter()
                     .map(|s| {
@@ -67,10 +63,7 @@ pub fn resolve_uses(
                 }
             };
 
-            let scopes = &workspace
-                .dependencies
-                .get_dependency_scopes(dependency_id)
-                .unwrap();
+            let scopes = workspace.get_scopes(project_link);
             let root = scopes.root_id();
 
             for flat in u.flatten_tree() {
@@ -89,7 +82,7 @@ pub fn resolve_uses(
                 ) {
                     Ok(scope_id) => {
                         resolved.add(
-                            dependency_id,
+                            project_link,
                             if star {
                                 UseTarget::UseTargetStar(UseTargetStar {
                                     scope: scope_id,
@@ -125,13 +118,9 @@ pub fn resolve_uses(
         }
         resolutions.insert(module_id, resolved);
     }
-    let project = &mut workspace
-        .dependencies
-        .get_dependency_mut(dependency_id)
-        .unwrap()
-        .project;
+    let project_mut = workspace.get_project_mut(project_link);
     for (module_id, resolved_uses) in resolutions.into_iter() {
-        project
+        project_mut
             .src
             .get_module_by_module_mut(module_id)
             .unwrap()
@@ -160,15 +149,15 @@ pub struct ResolvedStructOutline {
 pub fn resolve_workspace_outlines(
     rodeo: &mut Rodeo,
     workspace: &mut Workspace,
-    dependency_id: DependencyId,
+    project_link: ProjectLink,
 ) -> HashMap<FileId, Vec<SimpleSpan>> {
-    let import_errs = resolve_uses(rodeo, workspace, dependency_id);
+    let import_errs = resolve_uses(rodeo, workspace, project_link);
     if !import_errs.is_empty() {
         return import_errs;
     }
-    let func_errs = resolve_function_outline(rodeo, workspace, dependency_id);
-    let var_errs = resolve_variable_outline(rodeo, workspace, dependency_id);
-    let struct_errs = resolve_struct_outline(rodeo, workspace, dependency_id);
+    let func_errs = resolve_function_outline(rodeo, workspace, project_link);
+    let var_errs = resolve_variable_outline(rodeo, workspace, project_link);
+    let struct_errs = resolve_struct_outline(rodeo, workspace, project_link);
     let mut errs = HashMap::new();
     for (k, v) in func_errs.into_iter().chain(var_errs).chain(struct_errs) {
         v.into_iter()
@@ -180,20 +169,16 @@ pub fn resolve_workspace_outlines(
 pub fn resolve_function_outline(
     rodeo: &Rodeo,
     workspace: &mut Workspace,
-    dependency_id: DependencyId,
+    project_link: ProjectLink,
 ) -> HashMap<FileId, Vec<SimpleSpan>> {
     let workspace_read: &Workspace = workspace;
-    let project = &workspace_read
-        .dependencies
-        .get_dependency(dependency_id)
-        .unwrap()
-        .project;
+    let project = workspace_read.get_project(project_link);
 
     let mut errors = HashMap::<FileId, Vec<SimpleSpan>>::new();
     let mut to_update = HashMap::<FunctionId, ResolvedFunctionOutline>::new();
 
     for (func_id, func) in project.pool.functions.iter() {
-        let name_resolver = workspace_read.resolver_by_file(rodeo, dependency_id, func.file_id);
+        let name_resolver = workspace_read.resolver_by_file(rodeo, project_link, func.file_id);
         let Function { parameters, ty, .. } = &func.decl.ast;
         let parameters: Box<[Result<TypeId, TypeId>]> =
             resolve_multiple(parameters.iter().map(|param| &param.ty), &name_resolver);
@@ -220,11 +205,7 @@ pub fn resolve_function_outline(
         to_update.insert(func_id, ResolvedFunctionOutline { parameters, ret_ty });
     }
 
-    let project_mut = &mut workspace
-        .dependencies
-        .get_dependency_mut(dependency_id)
-        .unwrap()
-        .project;
+    let project_mut = workspace.get_project_mut(project_link);
     for (func_id, outline) in to_update.into_iter() {
         if let Some(func_info) = project_mut.pool.functions.get_mut(func_id) {
             func_info.decl.outline = Some(outline);
@@ -236,21 +217,17 @@ pub fn resolve_function_outline(
 pub fn resolve_variable_outline(
     rodeo: &Rodeo,
     workspace: &mut Workspace,
-    dependency_id: DependencyId,
+    project_link: ProjectLink,
 ) -> HashMap<FileId, Vec<SimpleSpan>> {
     let workspace_read: &Workspace = workspace;
 
-    let project = &workspace_read
-        .dependencies
-        .get_dependency(dependency_id)
-        .unwrap()
-        .project;
+    let project = workspace_read.get_project(project_link);
 
     let mut errors = HashMap::<FileId, Vec<SimpleSpan>>::new();
     let mut to_update = HashMap::<VariableId, ResolvedVariableOutline>::new();
 
     for (var_id, var) in project.pool.variables.iter() {
-        let name_resolver = workspace_read.resolver_by_file(rodeo, dependency_id, var.file_id);
+        let name_resolver = workspace_read.resolver_by_file(rodeo, project_link, var.file_id);
         let Variable { ty, .. } = &var.decl.ast;
         let ty = ty.as_ref().map(|ty| resolve_singular(ty, &name_resolver));
         if let Some(e) = ty.and_then(|r| r.err().to_owned()) {
@@ -270,11 +247,7 @@ pub fn resolve_variable_outline(
         }
         to_update.insert(var_id, ResolvedVariableOutline { ty });
     }
-    let project_mut = &mut workspace
-        .dependencies
-        .get_dependency_mut(dependency_id)
-        .unwrap()
-        .project;
+    let project_mut = workspace.get_project_mut(project_link);
     for (var_id, outline) in to_update.into_iter() {
         if let Some(func_info) = project_mut.pool.variables.get_mut(var_id) {
             func_info.decl.outline = Some(outline);
@@ -286,19 +259,15 @@ pub fn resolve_variable_outline(
 pub fn resolve_struct_outline(
     rodeo: &Rodeo,
     workspace: &mut Workspace,
-    dependency_id: DependencyId,
+    project_link: ProjectLink,
 ) -> HashMap<FileId, Vec<SimpleSpan>> {
-    let project = &workspace
-        .dependencies
-        .get_dependency(dependency_id)
-        .unwrap()
-        .project;
+    let project = workspace.get_project(project_link);
     let workspace_read: &Workspace = workspace;
     let mut errors = HashMap::<FileId, Vec<SimpleSpan>>::new();
     let mut to_update = HashMap::<StructId, ResolvedStructOutline>::new();
 
     for (struct_id, strct) in project.pool.structs.iter() {
-        let name_resolver = workspace_read.resolver_by_file(rodeo, dependency_id, strct.file_id);
+        let name_resolver = workspace_read.resolver_by_file(rodeo, project_link, strct.file_id);
         let (Struct { fields, .. }, _) = &strct.decl.ast;
         let fields = resolve_multiple(fields.iter().map(|field| &field.ty), &name_resolver);
         for e in fields.iter().filter_map(|r| r.err()) {
@@ -318,11 +287,7 @@ pub fn resolve_struct_outline(
         }
         to_update.insert(struct_id, ResolvedStructOutline { fields });
     }
-    let project_mut = &mut workspace
-        .dependencies
-        .get_dependency_mut(dependency_id)
-        .unwrap()
-        .project;
+    let project_mut = workspace.get_project_mut(project_link);
     for (struct_id, outline) in to_update.into_iter() {
         if let Some(func_info) = project_mut.pool.structs.get_mut(struct_id) {
             func_info.decl.outline = Some(outline);

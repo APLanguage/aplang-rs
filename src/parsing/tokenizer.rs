@@ -48,7 +48,7 @@ fn string_parser_callback(lex: &mut Lexer<Token>) -> Option<StringLiteralType> {
     let start = lex.span().start;
     let len = lex.span().end - lex.span().start;
     let (literal, span) = string_literal_outline_parser()
-        .map_with_span(|t, s| (t, s))
+        .map_with(|t, e| (t, e.span()))
         .lazy()
         .parse(lex.source().slice(start..end).unwrap())
         .into_output()?;

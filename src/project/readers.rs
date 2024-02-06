@@ -1,10 +1,10 @@
-use std::{collections::HashMap, ffi::OsStr, io::Read, path::Path, cell::RefCell, rc::Rc};
+use std::{cell::RefCell, collections::HashMap, ffi::OsStr, io::Read, path::Path, rc::Rc};
 
 use anyhow::Result;
 use chumsky::{prelude::Rich, primitive::end, span::SimpleSpan, Parser};
 use either::Either;
 use lasso::Rodeo;
-use slotmap::{KeyData, SlotMap};
+use slotmap::SlotMap;
 use thiserror::Error;
 
 use crate::{
@@ -24,9 +24,9 @@ use super::{
     scopes::{ScopeType, Scopes},
     std_lib::create_std_lib,
     AstFiles, DeclarationDelegate, DeclarationId, DeclarationInfo, DeclarationPool,
-    DeclarationResolutionStage, Dependencies, DependencyId, DependencyInfo, File, FileId, Files,
-    FunctionId, ModuleData, ModuleId, Project, StructId, TypeRegistry, VariableId, VirtualFile,
-    Workspace,
+    DeclarationResolutionStage, Dependencies, DependencyInfo, File, FileId, Files, FunctionId,
+    ModuleData, ModuleId, Project, ProjectLink, StructId, StructLink, TypeRegistry, VariableId,
+    VirtualFile, Workspace,
 };
 
 #[derive(Debug, Error)]
@@ -57,7 +57,6 @@ pub fn read_workspace(rodeo: &mut Rodeo, path: &Path) -> ReadWorkspaceResult {
         Ok(f) => f,
         Err(e) => return ReadWorkspaceResult::ErrFile(e),
     };
-    let project_name = rodeo.get_or_intern(&aplang_file.project.name);
     let mut types = TypeRegistry::new_by_spur_supplier(|s| rodeo.get_or_intern_static(s));
     let mut deps = Dependencies {
         deps: SlotMap::with_key(),
@@ -66,7 +65,7 @@ pub fn read_workspace(rodeo: &mut Rodeo, path: &Path) -> ReadWorkspaceResult {
 
     let project = match read_project(
         // just creating the egg manually
-        DependencyId(KeyData::from_ffi(1 << 32 | 1)),
+        ProjectLink::Project,
         rodeo,
         path.join("src").as_path(),
         &mut types,
@@ -74,23 +73,19 @@ pub fn read_workspace(rodeo: &mut Rodeo, path: &Path) -> ReadWorkspaceResult {
         ReadProjectResult::Err(err, files) => return ReadWorkspaceResult::ErrProject(err, files),
         ReadProjectResult::Ok(p) => p,
     };
-    // the egg created later from SlotMap
-    let id = deps.deps.insert(DependencyInfo {
-        name: project_name,
-        project,
-    });
-    deps.by_name.insert(project_name, id);
     let std_id = deps.add_dependency_with_key(|std_id| DependencyInfo {
         name: rodeo.get_or_intern_static("std"),
         project: create_std_lib(std_id, rodeo, &mut types),
     });
     let mut workspace = Workspace {
+        project_name: rodeo.get_or_intern(&aplang_file.project.name),
         aplang_file,
         dependencies: deps,
-        _project: id,
+        project,
         type_registery: Rc::new(RefCell::new(types)),
     };
-    let std_errs = &resolve_workspace_outlines(rodeo, &mut workspace, std_id);
+    let std_errs =
+        &resolve_workspace_outlines(rodeo, &mut workspace, ProjectLink::Dependency(std_id));
     if !std_errs.is_empty() {
         let project = &workspace
             .dependencies
@@ -118,17 +113,17 @@ pub enum ReadProjectResult {
 }
 
 pub fn read_project(
-    dependency_id: DependencyId,
+    project_link: ProjectLink,
     rodeo: &mut Rodeo,
     path: &Path,
     types: &mut TypeRegistry,
 ) -> ReadProjectResult {
     let (files, scopes) = read_files(rodeo, path);
-    read_project_from_files(dependency_id, rodeo, files, scopes, types)
+    read_project_from_files(project_link, rodeo, files, scopes, types)
 }
 
 pub fn read_project_from_files(
-    dependency_id: DependencyId,
+    project_link: ProjectLink,
     rodeo: &mut Rodeo,
     files: Files,
     mut scopes: Scopes,
@@ -196,7 +191,13 @@ pub fn read_project_from_files(
                         let name = s.name.0;
                         let id = structs.insert_with_key(|key| DeclarationInfo {
                             decl: DeclarationResolutionStage {
-                                ast: (s, types.create_struct(dependency_id, key)),
+                                ast: (
+                                    s,
+                                    types.create_struct(StructLink {
+                                        struct_id: key,
+                                        project_link,
+                                    }),
+                                ),
                                 outline: None,
                                 full: None,
                             },

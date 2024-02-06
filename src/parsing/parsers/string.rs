@@ -58,7 +58,7 @@ pub fn string_parser<'a>(
                     any()
                         .and_is(end.not())
                         .repeated()
-                        .slice()
+                        .to_slice()
                         .map(|s: &'a str| {
                             UnlassoedStringLiteral::Raw(s.to_owned().replace("\r\n", "\n"))
                         })

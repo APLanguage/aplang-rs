@@ -1,11 +1,11 @@
 use chumsky::{
+    prelude::Rich,
     primitive::{choice, group, just},
     recursive::recursive,
     select,
     span::SimpleSpan,
-    IterParser, Parser, prelude::Rich,
+    Parser,
 };
-use itertools::Itertools;
 
 use crate::parsing::{
     ast::expressions::{CallKind, Expression},
@@ -32,7 +32,7 @@ pub fn call<'a, EP, I: TokenInput<'a>>(
 where EP: TokenParser<'a, I, Expression> + Clone + 'a {
     ident()
         .spur()
-        .map_with_span(Spanned)
+        .spanned()
         .then(
             expr_parser
                 .spanned()
@@ -82,7 +82,7 @@ where EP: TokenParser<'a, I, Expression> + Clone + 'a {
             LessLessEqual
         )
         .boxed()
-        .map_with_span(Spanned)
+        .spanned()
         .labelled("assignement_operator")
         .paddedln(),
         expr_parser
@@ -131,7 +131,7 @@ pub fn unary_parser<'a, EP, I: TokenInput<'a>>(
 ) -> impl TokenParser<'a, I, Expression> + Clone
 where EP: TokenParser<'a, I, Expression> + Clone + 'a {
     ops_parser!(Minus, Bang, Tilde)
-        .map_with_span(Spanned)
+        .spanned()
         .repeated()
         .at_least(1)
         .collect_boxed_slice()
@@ -218,7 +218,7 @@ pub fn expression_parser<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, Exp
 
 use paste::paste;
 
-use super::{string::string_parser, TokenParserExt};
+use super::{string::string_parser, TokenParserExt, just_span};
 macro_rules! binary_parser {
     ($what:ident, $name: ident, $next_name: ident, $ops:expr) => {
         paste! {
@@ -244,14 +244,11 @@ macro_rules! binary_parser {
 #[rustfmt::skip] binary_parser!(binary, factor, bitops, ops_parser!(Asterisk, SlashSlash, Slash, Percent));
 #[rustfmt::skip] binary_parser!(binary, bitops, unary, ops_parser!(Bar, Ampersand, LessLess)
     .or(
-        just(Token::Greater).span().repeated().at_least(2).at_most(3).collect_boxed_slice()
-        .try_map(|slice, _span|
-            if slice.iter().tuple_windows().all(|(a, b)| a.end == b.start) {
-                Ok(if slice.len() == 2 { Operation::ShiftRight } else { Operation::ShiftRightUnsigned })
-            } else {
-                Err(Rich::custom(_span, "there is a whitespace between the two/three >"))
-            }
-        )
+        choice((
+            group((just_span(Token::Greater), just_span(Token::Greater), just_span(Token::Greater))).map(|(a, b, c)| (a.end == b.start && b.end == c.start).then_some(Operation::ShiftRightUnsigned)),
+            group((just_span(Token::Greater), just_span(Token::Greater))).map(|(a, b)| (a.end == b.start).then_some(Operation::ShiftRight)),
+        ))
+        .try_map(|op, span| op.ok_or_else(|| Rich::custom(span, "there is a whitespace between the two/three >")))
     )
 );
 

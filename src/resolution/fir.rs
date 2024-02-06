@@ -6,11 +6,11 @@ use crate::{
     parsing::{
         self,
         ast::expressions::StringLiteral,
-        parsers::{number::NumberLiteralError, self},
+        parsers::{self, number::NumberLiteralError},
         tokenizer::{Operation, OperationGroup},
         Infoable, Infoed, Spanned,
     },
-    project::{DependencyId, FunctionId, StructId, VariableId},
+    project::{DependencyId, FunctionId, ProjectLink, StructId, StructLink, VariableId},
     typing::{FloatWidth, IntegerWidth, TypeId},
 };
 
@@ -31,10 +31,10 @@ pub enum VariableType {
 
 #[derive(Debug, PartialEq)]
 pub enum CallKind {
-    StructField(DependencyId, StructId, usize),
+    StructField(StructLink, usize),
     Variable(VariableType),
     Function {
-        dependency_id: DependencyId,
+        project_link: ProjectLink,
         f_or_s_id: Either<FunctionId, StructId>,
         parameters: Box<[Infoed<Expression>]>,
     },
@@ -43,7 +43,7 @@ pub enum CallKind {
 #[derive(Debug, PartialEq)]
 pub enum AssignableTarget {
     Var(TypeId, VariableType),
-    StructField(TypeId, DependencyId, StructId, usize),
+    StructField(TypeId, StructLink, usize),
     Unnassignable,
 }
 

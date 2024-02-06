@@ -2,7 +2,6 @@
 #![allow(incomplete_features)]
 #![allow(unused_macros)]
 #![feature(trait_alias)]
-#![feature(return_position_impl_trait_in_trait)]
 #![feature(iter_collect_into)]
 // #![feature(iter_map_windows)]
 
@@ -15,9 +14,7 @@ use crate::{
         Spanned,
     },
     project::{
-        display_integer_type,
-        readers::{read_workspace, ReadWorkspaceError, ReadWorkspaceResult},
-        Workspace, TypeRegistry,
+        display_integer_type, readers::{read_workspace, ReadWorkspaceError, ReadWorkspaceResult}, ProjectLink, TypeRegistry, Workspace
     },
     resolution::{
         name_resolution::resolve_workspace_outlines,
@@ -85,8 +82,7 @@ fn main() {
     {
         let mut is_errors = false;
         println!("Resolving...");
-        let dependency_id = workspace.project_dep_id();
-        for (file_id, errs) in resolve_workspace_outlines(&mut rodeo, &mut workspace, dependency_id)
+        for (file_id, errs) in resolve_workspace_outlines(&mut rodeo, &mut workspace, ProjectLink::Project)
         {
             is_errors = true;
             let file = workspace.project().files.file_by_id(file_id).unwrap();
@@ -113,7 +109,7 @@ fn main() {
             // }
             return;
         }
-        for (file_id, errs) in resolve_and_typecheck_functions(&rodeo, &mut workspace, dependency_id) {
+        for (file_id, errs) in resolve_and_typecheck_functions(&rodeo, &mut workspace, ProjectLink::Project) {
             is_errors = true;
             let file = workspace.project().files.file_by_id(file_id).unwrap();
             // Generate & choose some colours for each of our elements
@@ -188,14 +184,12 @@ fn main() {
                             )
                     },
                     FieldNotFound(
-                        Spanned((dep, struct_id), base_span),
+                        Spanned(struct_link, base_span),
                         Spanned(name, name_span),
                     ) => {
-                        let dep = workspace.dependencies.get_dependency(dep).unwrap();
-                        let project_name = rodeo.resolve(&dep.name);
-                        let struct_path = &dep
-                            .project
-                            .struct_path(struct_id)
+                        let project_name = rodeo.resolve(&workspace.get_dependency_name(struct_link.project_link));
+                        let struct_path = workspace.get_project(struct_link.project_link)
+                            .struct_path(struct_link.struct_id)
                             .map(|s| rodeo.resolve(&s))
                             .join("::");
                         let struct_color = colors.next();
@@ -203,7 +197,7 @@ fn main() {
                             "No field `{}` found for struct ({}) {}",
                             rodeo.resolve(&name).fg(ariadne::Color::Red),
                             project_name.fg(struct_color),
-                            struct_path.fg(struct_color),
+                            (&struct_path).fg(struct_color),
                         ))
                         .with_label({
                             ariadne::Label::new((&input_name as &str, base_span.into_range()))

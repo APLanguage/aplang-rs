@@ -8,8 +8,8 @@ use slotmap::new_key_type;
 use strum_macros::Display;
 
 use crate::{
-    parsing::{Spanned, parsers::number::LiteralWidth},
-    project::{DependencyId, FileId, StructId},
+    parsing::{parsers::number::LiteralWidth, Spanned},
+    project::{FileId, StructLink},
     source::DeclarationPath,
 };
 
@@ -27,7 +27,7 @@ pub enum OperationResult {
 #[derive(Debug, PartialEq, Clone, Eq , Hash )]
 pub enum Type {
     PrimitiveType(PrimitiveType),
-    Data(DependencyId, StructId),
+    Data(StructLink),
     Array {
         ty: TypeId,
         size: Option<NonZeroUsize>,

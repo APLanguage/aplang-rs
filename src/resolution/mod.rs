@@ -8,7 +8,8 @@ use crate::parsing::ast::ParsedType;
 use crate::parsing::Spanned;
 use crate::project::scopes::ScopeId;
 use crate::project::{
-    Dependencies, DependencyId, FileId, FunctionId, ResolvedUses, StructId, TypeRegistry,
+    FileId, FunctionId, ProjectLink, ResolvedUses, StructId,
+    TypeRegistry, Workspace,
 };
 use crate::typing::{PrimitiveType, Type, TypeId};
 
@@ -17,9 +18,9 @@ pub mod name_resolution;
 pub mod type_resolution;
 
 pub struct FileScopedNameResolver<'a> {
-    pub dependencies: &'a Dependencies,
+    pub workspace: &'a Workspace,
     pub type_registery: Rc<RefCell<TypeRegistry>>,
-    pub dependency_id: DependencyId,
+    pub project_link: ProjectLink,
     pub scope_id: ScopeId,
     pub file_id: FileId,
     pub resolved_uses: &'a ResolvedUses,
@@ -27,21 +28,18 @@ pub struct FileScopedNameResolver<'a> {
 }
 impl<'a> FileScopedNameResolver<'a> {
     pub fn new_with_scope(
-        deps: &'a Dependencies,
+        workspace: &'a Workspace,
         types: Rc<RefCell<TypeRegistry>>,
-        dependency_id: DependencyId,
+        project_link: ProjectLink,
         scope_id: ScopeId,
         rodeo: &'a Rodeo,
     ) -> FileScopedNameResolver<'a> {
-        let file_id = deps
-            .get_dependency_scopes(dependency_id)
-            .unwrap()
+        let file_id = workspace
+            .get_scopes(project_link)
             .scope_as_file(scope_id)
             .unwrap();
-        let resolved_uses = deps
-            .get_dependency(dependency_id)
-            .unwrap()
-            .project
+        let resolved_uses = workspace
+            .get_project(project_link)
             .src
             .get_module_by_file(file_id)
             .unwrap()
@@ -50,9 +48,9 @@ impl<'a> FileScopedNameResolver<'a> {
             .as_ref()
             .expect_right("should have been resolved");
         Self {
-            dependencies: deps,
+            workspace,
             type_registery: types,
-            dependency_id,
+            project_link,
             scope_id,
             file_id,
             resolved_uses,
@@ -61,21 +59,18 @@ impl<'a> FileScopedNameResolver<'a> {
     }
 
     pub fn new_with_file(
-        deps: &'a Dependencies,
+        workspace: &'a Workspace,
         types: Rc<RefCell<TypeRegistry>>,
-        dependency_id: DependencyId,
+        project_link: ProjectLink,
         file_id: FileId,
         rodeo: &'a Rodeo,
     ) -> FileScopedNameResolver<'a> {
-        let scope_id = deps
-            .get_dependency_scopes(dependency_id)
-            .unwrap()
+        let scope_id = workspace
+            .get_scopes(project_link)
             .scope_of_file(file_id)
             .unwrap();
-        let resolved_uses = deps
-            .get_dependency(dependency_id)
-            .unwrap()
-            .project
+        let resolved_uses = workspace
+            .get_project(project_link)
             .src
             .get_module_by_file(file_id)
             .unwrap()
@@ -84,9 +79,9 @@ impl<'a> FileScopedNameResolver<'a> {
             .as_ref()
             .expect_right("should have been resolved");
         Self {
-            dependencies: deps,
+            workspace,
             type_registery: types,
-            dependency_id,
+            project_link,
             scope_id,
             file_id,
             resolved_uses,
@@ -95,11 +90,7 @@ impl<'a> FileScopedNameResolver<'a> {
     }
 
     pub fn resolve_type(&self, parsed_type: &ParsedType) -> Result<TypeId, TypeId> {
-        let dependency_id = self.dependency_id;
-        let scopes = self
-            .dependencies
-            .get_dependency_scopes(dependency_id)
-            .expect("Dependency should exist");
+        let scopes = self.workspace.get_scopes(self.project_link);
         let scope = self.scope_id;
 
         let (name_for_search, span) = match parsed_type {
@@ -120,21 +111,20 @@ impl<'a> FileScopedNameResolver<'a> {
                 scopes
                     .scope_as_declaration(scope_id)
                     .and_then(|(_name, dec_id)| {
-                        self.dependencies
-                            .get_dependency(dependency_id)?
-                            .project
+                        self.workspace
+                            .get_project(self.project_link)
                             .pool
                             .type_id_of_declaration(dec_id)
                     })
             })
             .chain(
                 self.resolved_uses
-                    .find_struct_in_single(self.dependencies, name_for_search)
+                    .find_struct_in_single(self.workspace, name_for_search)
                     .map(|(.., type_id)| type_id)
                     .chain(self.find_in_primitives(name_for_search))
                     .chain(
                         self.resolved_uses
-                            .find_struct_in_stars(self.dependencies, name_for_search)
+                            .find_struct_in_stars(self.workspace, name_for_search)
                             .map(|(.., type_id)| type_id),
                     ),
             )
@@ -173,7 +163,7 @@ impl<'a> FileScopedNameResolver<'a> {
     fn resolve_struct(
         &'a self,
         identifier: Spur,
-    ) -> impl Iterator<Item = (DependencyId, StructId)> + 'a {
+    ) -> impl Iterator<Item = (ProjectLink, StructId)> + 'a {
         self.resolve_struct_in_file(identifier)
             .chain(self.resolve_struct_in_uses(identifier))
     }
@@ -181,7 +171,7 @@ impl<'a> FileScopedNameResolver<'a> {
     fn resolve_func(
         &'a self,
         identifier: Spur,
-    ) -> impl Iterator<Item = (DependencyId, FunctionId)> + 'a {
+    ) -> impl Iterator<Item = (ProjectLink, FunctionId)> + 'a {
         self.resolve_func_in_file(identifier)
             .chain(self.resolve_func_in_uses(identifier))
     }
@@ -189,11 +179,8 @@ impl<'a> FileScopedNameResolver<'a> {
     fn resolve_struct_in_file(
         &'a self,
         identifier: Spur,
-    ) -> impl Iterator<Item = (DependencyId, StructId)> + 'a {
-        let scopes = self
-            .dependencies
-            .get_dependency_scopes(self.dependency_id)
-            .expect("Dependency should exist");
+    ) -> impl Iterator<Item = (ProjectLink, StructId)> + 'a {
+        let scopes = self.workspace.get_scopes(self.project_link);
         scopes
             .scope_children_by_name(self.scope_id, identifier)
             .into_iter()
@@ -202,12 +189,11 @@ impl<'a> FileScopedNameResolver<'a> {
                 scopes
                     .scope_as_declaration(scope_id)
                     .and_then(|(_name, dec_id)| {
-                        self.dependencies
-                            .get_dependency(self.dependency_id)?
-                            .project
+                        self.workspace
+                            .get_project(self.project_link)
                             .pool
                             .declaration_id_as_struct(dec_id)
-                            .map(|strct_id| (self.dependency_id, strct_id))
+                            .map(|strct_id| (self.project_link, strct_id))
                     })
             })
     }
@@ -215,13 +201,13 @@ impl<'a> FileScopedNameResolver<'a> {
     fn resolve_struct_in_uses(
         &'a self,
         identifier: Spur,
-    ) -> impl Iterator<Item = (DependencyId, StructId)> + 'a {
+    ) -> impl Iterator<Item = (ProjectLink, StructId)> + 'a {
         self.resolved_uses
             .find(identifier)
-            .filter_map(|(dep, sp_id)| {
-                let project = &self.dependencies.get_dependency(dep)?.project;
+            .filter_map(|(project_link, sp_id)| {
+                let project = &self.workspace.get_project(project_link);
                 Some((
-                    dep,
+                    project_link,
                     project
                         .pool
                         .declaration_id_as_struct(project.scopes.scope_as_declaration(sp_id)?.1)?,
@@ -232,11 +218,8 @@ impl<'a> FileScopedNameResolver<'a> {
     fn resolve_func_in_file(
         &'a self,
         identifier: Spur,
-    ) -> impl Iterator<Item = (DependencyId, FunctionId)> + 'a {
-        let scopes = self
-            .dependencies
-            .get_dependency_scopes(self.dependency_id)
-            .expect("Dependency should exist");
+    ) -> impl Iterator<Item = (ProjectLink, FunctionId)> + 'a {
+        let scopes = self.workspace.get_scopes(self.project_link);
         scopes
             .scope_children_by_name(self.scope_id, identifier)
             .into_iter()
@@ -245,12 +228,11 @@ impl<'a> FileScopedNameResolver<'a> {
                 scopes
                     .scope_as_declaration(scope_id)
                     .and_then(|(_name, dec_id)| {
-                        self.dependencies
-                            .get_dependency(self.dependency_id)?
-                            .project
+                        self.workspace
+                            .get_project(self.project_link)
                             .pool
                             .declaration_id_as_func(dec_id)
-                            .map(|func_id| (self.dependency_id, func_id))
+                            .map(|func_id| (self.project_link, func_id))
                     })
             })
     }
@@ -258,13 +240,13 @@ impl<'a> FileScopedNameResolver<'a> {
     fn resolve_func_in_uses(
         &'a self,
         identifier: Spur,
-    ) -> impl Iterator<Item = (DependencyId, FunctionId)> + 'a {
+    ) -> impl Iterator<Item = (ProjectLink, FunctionId)> + 'a {
         self.resolved_uses
             .find(identifier)
-            .filter_map(|(dep, sp_id)| {
-                let project = &self.dependencies.get_dependency(dep)?.project;
+            .filter_map(|(project_link, sp_id)| {
+                let project = self.workspace.get_project(project_link);
                 Some((
-                    dep,
+                    project_link,
                     project
                         .pool
                         .declaration_id_as_func(project.scopes.scope_as_declaration(sp_id)?.1)?,
@@ -275,11 +257,8 @@ impl<'a> FileScopedNameResolver<'a> {
     fn resolve_callable(
         &'a self,
         identifier: Spur,
-    ) -> impl Iterator<Item = (DependencyId, Either<FunctionId, StructId>)> + 'a {
-        let scopes = self
-            .dependencies
-            .get_dependency_scopes(self.dependency_id)
-            .expect("Dependency should exist");
+    ) -> impl Iterator<Item = (ProjectLink, Either<FunctionId, StructId>)> + 'a {
+        let scopes = self.workspace.get_scopes(self.project_link);
         scopes
             .scope_children_by_name(self.scope_id, identifier)
             .into_iter()
@@ -288,27 +267,23 @@ impl<'a> FileScopedNameResolver<'a> {
                 scopes
                     .scope_as_declaration(scope_id)
                     .and_then(|(_name, dec_id)| {
-                        let declaration_pool = &self
-                            .dependencies
-                            .get_dependency(self.dependency_id)?
-                            .project
-                            .pool;
+                        let declaration_pool = &self.workspace.get_project(self.project_link).pool;
                         declaration_pool
                             .declaration_id_as_func(dec_id)
-                            .map(|func_id| (self.dependency_id, Left(func_id)))
+                            .map(|func_id| (self.project_link, Left(func_id)))
                             .or_else(|| {
                                 declaration_pool
                                     .declaration_id_as_struct(dec_id)
-                                    .map(|strct_id| (self.dependency_id, Right(strct_id)))
+                                    .map(|strct_id| (self.project_link, Right(strct_id)))
                             })
                     })
             })
             .chain(
                 self.resolved_uses
                     .find(identifier)
-                    .filter_map(|(dep, sp_id)| {
-                        let project = &self.dependencies.get_dependency(dep)?.project;
-                        Some((dep, {
+                    .filter_map(|(project_link, sp_id)| {
+                        let project = &self.workspace.get_project(project_link);
+                        Some((project_link, {
                             let dec_id = project.scopes.scope_as_declaration(sp_id)?.1;
                             project
                                 .pool
