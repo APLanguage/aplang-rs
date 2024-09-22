@@ -40,8 +40,9 @@ pub enum ReadWorkspaceError {
 pub enum ReadWorkspaceResult {
     ErrFile(anyhow::Error),
     ErrProject(anyhow::Error, Files),
-    Ok(Workspace),
+    Ok(Box<Workspace>),
 }
+
 pub fn read_aplang_file(path: &Path) -> Result<APLangWorkspaceFile> {
     let aplang_toml = path.join("aplang.toml");
     if !aplang_toml.exists() {
@@ -71,7 +72,7 @@ pub fn read_workspace(rodeo: &mut Rodeo, path: &Path) -> ReadWorkspaceResult {
         &mut types,
     ) {
         ReadProjectResult::Err(err, files) => return ReadWorkspaceResult::ErrProject(err, files),
-        ReadProjectResult::Ok(p) => p,
+        ReadProjectResult::Ok(p) => *p,
     };
     let std_id = deps.add_dependency_with_key(|std_id| DependencyInfo {
         name: rodeo.get_or_intern_static("std"),
@@ -84,14 +85,10 @@ pub fn read_workspace(rodeo: &mut Rodeo, path: &Path) -> ReadWorkspaceResult {
         project,
         type_registery: Rc::new(RefCell::new(types)),
     };
-    let std_errs =
-        &resolve_workspace_outlines(rodeo, &mut workspace, ProjectLink::Dependency(std_id));
+    let std_id = ProjectLink::Dependency(std_id);
+    let std_errs = &resolve_workspace_outlines(rodeo, &mut workspace, std_id);
     if !std_errs.is_empty() {
-        let project = &workspace
-            .dependencies
-            .get_dependency(std_id)
-            .unwrap()
-            .project;
+        let project = workspace.get_project(std_id);
         for (f_id, errs) in std_errs {
             eprintln!(
                 "found {} errs in {}:",
@@ -104,12 +101,12 @@ pub fn read_workspace(rodeo: &mut Rodeo, path: &Path) -> ReadWorkspaceResult {
         }
         panic!("There are resolution errors in std!")
     }
-    ReadWorkspaceResult::Ok(workspace)
+    ReadWorkspaceResult::Ok(Box::new(workspace))
 }
 
 pub enum ReadProjectResult {
     Err(anyhow::Error, Files),
-    Ok(Project),
+    Ok(Box<Project>),
 }
 
 pub fn read_project(
@@ -231,7 +228,7 @@ pub fn read_project_from_files(
         return ReadProjectResult::Err(ReadWorkspaceError::ParseErrors(parse_errors).into(), files);
     }
 
-    ReadProjectResult::Ok(Project {
+    ReadProjectResult::Ok(Box::new(Project {
         src: AstFiles::new(modules),
         pool: DeclarationPool {
             functions,
@@ -241,7 +238,7 @@ pub fn read_project_from_files(
         },
         files,
         scopes,
-    })
+    }))
 }
 
 fn read_files(rodeo: &mut Rodeo, path: &Path) -> (Files, Scopes) {

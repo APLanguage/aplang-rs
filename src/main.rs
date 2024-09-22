@@ -14,7 +14,9 @@ use crate::{
         Spanned,
     },
     project::{
-        display_integer_type, readers::{read_workspace, ReadWorkspaceError, ReadWorkspaceResult}, ProjectLink, TypeRegistry, Workspace
+        display_integer_type,
+        readers::{read_workspace, ReadWorkspaceError, ReadWorkspaceResult},
+        ProjectLink, TypeRegistry, Workspace,
     },
     resolution::{
         name_resolution::resolve_workspace_outlines,
@@ -30,7 +32,7 @@ use parsing::{
     tokenizer::tokenize,
 };
 use source::VirtualFile;
-use thiserror::__private::PathAsDisplay;
+use thiserror::__private::AsDisplay;
 
 use crate::{
     parsing::{
@@ -82,7 +84,8 @@ fn main() {
     {
         let mut is_errors = false;
         println!("Resolving...");
-        for (file_id, errs) in resolve_workspace_outlines(&mut rodeo, &mut workspace, ProjectLink::Project)
+        for (file_id, errs) in
+            resolve_workspace_outlines(&mut rodeo, &mut workspace, ProjectLink::Project)
         {
             is_errors = true;
             let file = workspace.project().files.file_by_id(file_id).unwrap();
@@ -109,7 +112,9 @@ fn main() {
             // }
             return;
         }
-        for (file_id, errs) in resolve_and_typecheck_functions(&rodeo, &mut workspace, ProjectLink::Project) {
+        for (file_id, errs) in
+            resolve_and_typecheck_functions(&rodeo, &mut workspace, ProjectLink::Project)
+        {
             is_errors = true;
             let file = workspace.project().files.file_by_id(file_id).unwrap();
             // Generate & choose some colours for each of our elements
@@ -460,7 +465,7 @@ fn read_workspace_and_report(rodeo: &mut Rodeo, path: &Path) -> Option<Workspace
             };
             None
         }
-        ReadWorkspaceResult::Ok(workspace) => Some(workspace),
+        ReadWorkspaceResult::Ok(workspace) => Some(*workspace),
     }
 }
 

@@ -28,7 +28,7 @@ macro_rules! ops_parser {
 
 pub fn call<'a, EP, I: TokenInput<'a>>(
     expr_parser: EP,
-) -> impl TokenParser<'a, I, CallKind> + Clone
+) -> impl TokenParser<'a, I, CallKind>
 where EP: TokenParser<'a, I, Expression> + Clone + 'a {
     ident()
         .spur()
@@ -58,7 +58,7 @@ where EP: TokenParser<'a, I, Expression> + Clone + 'a {
 
 pub fn assignment_parser<'a, EP, I: TokenInput<'a>>(
     expr_parser: EP,
-) -> impl TokenParser<'a, I, Expression> + Clone
+) -> impl TokenParser<'a, I, Expression>
 where EP: TokenParser<'a, I, Expression> + Clone + 'a {
     group((
         atom_parser(expr_parser.clone())
@@ -101,7 +101,7 @@ where EP: TokenParser<'a, I, Expression> + Clone + 'a {
 
 pub fn if_expr_parser<'a, EP, I: TokenInput<'a>>(
     expr_parser: EP,
-) -> impl TokenParser<'a, I, Expression> + Clone
+) -> impl TokenParser<'a, I, Expression>
 where EP: TokenParser<'a, I, Expression> + Clone + 'a {
     keyword(Identifier::If)
         .ignore_then(group((
@@ -128,7 +128,7 @@ where EP: TokenParser<'a, I, Expression> + Clone + 'a {
 
 pub fn unary_parser<'a, EP, I: TokenInput<'a>>(
     expr_parser: EP,
-) -> impl TokenParser<'a, I, Expression> + Clone
+) -> impl TokenParser<'a, I, Expression>
 where EP: TokenParser<'a, I, Expression> + Clone + 'a {
     ops_parser!(Minus, Bang, Tilde)
         .spanned()
@@ -154,7 +154,7 @@ where EP: TokenParser<'a, I, Expression> + Clone + 'a {
 
 pub fn atom_parser<'a, EP, I: TokenInput<'a>>(
     expr_parser: EP,
-) -> impl TokenParser<'a, I, Expression> + Clone
+) -> impl TokenParser<'a, I, Expression>
 where EP: TokenParser<'a, I, Expression> + Clone + 'a {
     choice((
         just(Token::Number)
@@ -204,7 +204,7 @@ where EP: TokenParser<'a, I, Expression> + Clone + 'a {
     .boxed()
 }
 
-pub fn expression_parser<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, Expression> + Clone {
+pub fn expression_parser<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, Expression> {
     recursive(|p| {
         choice((
             if_expr_parser(p.clone()),
@@ -222,7 +222,7 @@ use super::{string::string_parser, TokenParserExt, just_span};
 macro_rules! binary_parser {
     ($what:ident, $name: ident, $next_name: ident, $ops:expr) => {
         paste! {
-            pub fn  [< $name _parser >] <'a, EP, I: TokenInput<'a>>(expr_parser: EP) -> impl TokenParser<'a, I, Expression> + Clone
+            pub fn  [< $name _parser >] <'a, EP, I: TokenInput<'a>>(expr_parser: EP) -> impl TokenParser<'a, I, Expression>
             where
                 EP: TokenParser<'a, I, Expression> + Clone + 'a,
             {
@@ -256,7 +256,7 @@ pub fn operation_chain_parser<'a, NP, OP, I: TokenInput<'a>>(
     next_parser: NP,
     operator_parser: OP,
     group: OperationGroup,
-) -> impl TokenParser<'a, I, Expression> + Clone
+) -> impl TokenParser<'a, I, Expression>
 where
     NP: TokenParser<'a, I, Expression> + Clone + 'a,
     OP: TokenParser<'a, I, Operation> + Clone + 'a,
@@ -291,7 +291,7 @@ pub fn binary_parser<'a, NP, OP, I: TokenInput<'a>>(
     next_parser: NP,
     operator_parser: OP,
     group: OperationGroup,
-) -> impl TokenParser<'a, I, Expression> + Clone
+) -> impl TokenParser<'a, I, Expression>
 where
     NP: TokenParser<'a, I, Expression> + Clone + 'a,
     OP: TokenParser<'a, I, Operation> + Clone + 'a,

@@ -53,7 +53,7 @@ impl<'a, I: TokenInput<'a>, O, T> TokenParser<'a, I, O> for T where T: Parser<'a
 pub trait CollectBoxedSliceExt<'a, I, O>:
     IterParser<'a, I, O, TokenParserExtra<'a>> + Clone
 where I: TokenInput<'a> {
-    fn collect_boxed_slice(self) -> impl TokenParser<'a, I, Box<[O]>> + Clone {
+    fn collect_boxed_slice(self) -> impl TokenParser<'a, I, Box<[O]>> {
         self.collect::<Vec<O>>()
             .map::<Box<[O]>, _>(|v| v.into_boxed_slice())
     }
@@ -70,7 +70,7 @@ pub trait TokenParserExt<'a, I, O>: TokenParser<'a, I, O> + Clone
 where
     I: TokenInput<'a>,
     O: Debug, {
-    fn infoed<F, IA>(self, func: F) -> impl TokenParser<'a, I, Infoed<O>> + Clone
+    fn infoed<F, IA>(self, func: F) -> impl TokenParser<'a, I, Infoed<O>>
     where
         O: Infoable<Info = IA> + Debug + Clone,
         F: (Fn(O, SimpleSpan, &mut ParserState<'a>) -> (O, IA)) + Clone, {
@@ -84,7 +84,7 @@ where
         })
     }
 
-    fn paddedln(self) -> impl TokenParser<'a, I, O> + Clone {
+    fn paddedln(self) -> impl TokenParser<'a, I, O> {
         self.padded_by(newline().repeated())
     }
 
@@ -97,25 +97,25 @@ where
     }
 
     #[inline(always)]
-    fn span(self) -> impl TokenParser<'a, I, SimpleSpan> + Clone {
+    fn span(self) -> impl TokenParser<'a, I, SimpleSpan> {
         self.to_span()
     }
 
-    fn spur(self) -> impl TokenParser<'a, I, Spur> + Clone {
+    fn spur(self) -> impl TokenParser<'a, I, Spur> {
         self.span()
             .map_with_state(|_, span, state| state.intern(span.into()).unwrap())
     }
 
-    fn src(self) -> impl TokenParser<'a, I, &'a str> + Clone {
+    fn src(self) -> impl TokenParser<'a, I, &'a str> {
         self.span()
             .map_with_state(|_, span, state| state.slice(span.into()).unwrap())
     }
 
-    fn spanned(self) -> impl TokenParser<'a, I, Spanned<O>> + Clone {
+    fn spanned(self) -> impl TokenParser<'a, I, Spanned<O>> {
         self.map_with(|t, e| Spanned(t, e.span()))
     }
 
-    fn map_into<R: From<O>>(self) -> impl TokenParser<'a, I, R> + Clone {
+    fn map_into<R: From<O>>(self) -> impl TokenParser<'a, I, R> {
         self.map(Into::into)
     }
 }

@@ -12,7 +12,7 @@ use crate::parsing::{
 
 use super::{declarations::variable_parser, TokenParserExt};
 
-pub fn if_parser<'a, I, SP>(stmt_parser: SP) -> impl TokenParser<'a, I, ControlFlow> + Clone
+pub fn if_parser<'a, I, SP>(stmt_parser: SP) -> impl TokenParser<'a, I, ControlFlow>
 where
     I: TokenInput<'a>,
     SP: TokenParser<'a, I, Spanned<Statement>> + Clone + 'a, {
@@ -67,7 +67,7 @@ where
         .boxed()
 }
 
-pub fn while_parser<'a, I, SP>(stmt_parser: SP) -> impl TokenParser<'a, I, ControlFlow> + Clone
+pub fn while_parser<'a, I, SP>(stmt_parser: SP) -> impl TokenParser<'a, I, ControlFlow>
 where
     I: TokenInput<'a>,
     SP: TokenParser<'a, I, Spanned<Statement>> + Clone + 'a, {
@@ -102,7 +102,7 @@ where
 
 pub fn control_flow_parser<'a, I, SP>(
     stmt_parser: SP,
-) -> impl TokenParser<'a, I, ControlFlow> + Clone
+) -> impl TokenParser<'a, I, ControlFlow>
 where
     I: TokenInput<'a>,
     SP: TokenParser<'a, I, Spanned<Statement>> + Clone + 'a, {
@@ -118,7 +118,7 @@ where
     .labelled("control-flow")
 }
 
-fn return_parser<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, ControlFlow> + Clone {
+fn return_parser<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, ControlFlow> {
     keyword(Identifier::Return)
         .ignore_then(
             expression_parser()
@@ -134,7 +134,7 @@ fn return_parser<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, ControlFlow
 }
 
 pub fn statement_parser<'a, I: TokenInput<'a>>(
-) -> impl TokenParser<'a, I, Spanned<Statement>> + Clone {
+) -> impl TokenParser<'a, I, Spanned<Statement>>  {
     recursive::<_, Spanned<Statement>, _, _, _>(|p| {
         choice((
             variable_parser()

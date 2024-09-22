@@ -282,17 +282,17 @@ impl From<Token> for Operation {
     }
 }
 
-pub fn ident<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, Identifier> + Clone {
+pub fn ident<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, Identifier> {
     select! { Token::Identifier(id) => id }
 }
 
 #[inline]
-pub fn keyword<'a, I: TokenInput<'a>>(id: Identifier) -> impl TokenParser<'a, I, ()> + Clone {
+pub fn keyword<'a, I: TokenInput<'a>>(id: Identifier) -> impl TokenParser<'a, I, ()> {
     just(Token::Identifier(id)).ignored()
 }
 
 #[inline]
-pub fn newline<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, ()> + Clone {
+pub fn newline<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, ()> {
     any().filter(|t| matches!(t, Token::NewLine)).ignored()
 }
 

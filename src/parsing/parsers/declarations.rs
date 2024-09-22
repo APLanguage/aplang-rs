@@ -66,7 +66,7 @@ pub fn struct_parser<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, Struct>
         .boxed()
 }
 
-pub fn type_parser<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, ParsedType> + Clone {
+pub fn type_parser<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, ParsedType> {
     recursive(|p| {
         choice((
             ident().spur().spanned().map(ParsedType::Data),
@@ -77,7 +77,7 @@ pub fn type_parser<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, ParsedTyp
     .boxed()
 }
 
-pub fn variable_parser<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, Variable> + Clone {
+pub fn variable_parser<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, Variable> {
     group((
         choice((
             keyword(Identifier::Var).to(true),

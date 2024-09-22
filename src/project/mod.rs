@@ -48,6 +48,24 @@ pub struct StructLink {
     pub project_link: ProjectLink,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct FunctionLink {
+    pub func_id: FunctionId,
+    pub project_link: ProjectLink,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct VariableLink {
+    pub var_id: VariableId,
+    pub project_link: ProjectLink,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct FieldLink {
+    pub struct_link: StructLink,
+    pub field: usize,
+}
+
 #[derive(Default)]
 pub struct TypeRegistry {
     types: SlotMap<TypeId, Type>,
@@ -586,7 +604,7 @@ impl Dependencies {
         }
         self.by_name
             .get(name.first().unwrap())
-            .map(DependencyId::clone)
+            .copied()
             .map(ProjectLink::Dependency)
             .ok_or(0)
     }
@@ -678,7 +696,7 @@ impl ResolvedUses {
         &'a self,
         workspace: &'a Workspace,
         name: Spur,
-    ) -> impl Iterator<Item = (ProjectLink, ScopeId, DeclarationId, StructId, TypeId)> + '_ {
+    ) -> impl Iterator<Item = (ProjectLink, ScopeId, DeclarationId, StructId, TypeId)> + 'a {
         self.find(name).filter_map(|(project_link, scope_id)| {
             self.filter_finding(workspace, project_link, scope_id)
         })
@@ -688,7 +706,7 @@ impl ResolvedUses {
         &'a self,
         workspace: &'a Workspace,
         name: Spur,
-    ) -> impl Iterator<Item = (ProjectLink, ScopeId, DeclarationId, StructId, TypeId)> + '_ {
+    ) -> impl Iterator<Item = (ProjectLink, ScopeId, DeclarationId, StructId, TypeId)> + 'a {
         self.find_in_single(name)
             .filter_map(|(project_link, scope_id)| {
                 self.filter_finding(workspace, project_link, scope_id)
@@ -699,7 +717,7 @@ impl ResolvedUses {
         &'a self,
         workspace: &'a Workspace,
         name: Spur,
-    ) -> impl Iterator<Item = (ProjectLink, ScopeId, DeclarationId, StructId, TypeId)> + '_ {
+    ) -> impl Iterator<Item = (ProjectLink, ScopeId, DeclarationId, StructId, TypeId)> + 'a {
         self.find_in_stars(name)
             .filter_map(|(project_link, scope_id)| {
                 self.filter_finding(workspace, project_link, scope_id)

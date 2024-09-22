@@ -151,6 +151,7 @@ pub fn resolve_workspace_outlines(
     workspace: &mut Workspace,
     project_link: ProjectLink,
 ) -> HashMap<FileId, Vec<SimpleSpan>> {
+    // TODO: rewrite import error handling
     let import_errs = resolve_uses(rodeo, workspace, project_link);
     if !import_errs.is_empty() {
         return import_errs;

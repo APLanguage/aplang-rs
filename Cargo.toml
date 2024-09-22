@@ -7,31 +7,39 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-chumsky = { version = "1.0.0-alpha.6", features = [ "label" ] }
+chumsky = { version = "1.0.0-alpha.7", features = [ "label" ] }
 walkdir = { git = "https://github.com/APLanguage/walkdir.git" }
 # chumsky = { version = "1.0.0-alpha.4", features = ["label"] }
-num = "0.4.1"
+num = "0.4.3"
 num-traits = "0.2"
 # num-derive = "0.3"
 regex = "1.10"
-logos = "0.13"
+logos = "0.14"
 paste = "1.0"
 # clap = "4.1"
 anyhow = "1.0"
 thiserror = "1.0"
 traversal = "0.1"
-either = "1.9"
+either = "1.13"
 lasso = "0.7"
-indextree = "4.6"
-slotmap = "1.0.6"
+indextree = "4.7"
+slotmap = "1.0.7"
 ariadne = { git = "https://github.com/APLanguage/ariadne.git", rev = "bdc392368fb45e71aff0feca58d0bf66f56698ae" }
-itertools = "0.11"
-toml = "0.8.8"
+itertools = "0.13"
+toml = "0.8.19"
 serde = { version = "1.0", features = ["derive"] }
 same-file = "1.0.6"
-strum = "0.25"
-strum_macros = "0.25"
+strum = "0.26"
+strum_macros = "0.26"
 bigdecimal = { git = "https://github.com/APLanguage/bigdecimal-rs.git", rev = "864927641721a39299e460deebdc85d01ea0930b" }
+tracing = "0.1"
+tracing-subscriber = {version = "0.3", features = ["default", "json"]}
+
 
 [target.'cfg(windows)'.dependencies.winapi-util]
-version = "0.1.6"
+version = "0.1.9"
+
+[profile.release]
+panic = "unwind"
+# debug = "line-tables-only"
+debug = "full"

@@ -43,6 +43,6 @@ pub fn create_std_lib(
         types,
     ) {
         ReadProjectResult::Err(_, _) => panic!("The std should compile!"),
-        ReadProjectResult::Ok(p) => p,
+        ReadProjectResult::Ok(p) => *p,
     }
 }

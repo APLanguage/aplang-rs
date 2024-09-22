@@ -20,7 +20,7 @@ use crate::parsing::{
 
 pub type File = (Box<[UseDeclaration]>, Box<[Declaration]>);
 
-pub fn file_parser<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, File> + Clone {
+pub fn file_parser<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, File> {
     choice((
         struct_parser().map(Declaration::Struct).map(Either::Right),
         variable_parser()
