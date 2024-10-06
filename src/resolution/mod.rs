@@ -93,7 +93,7 @@ impl<'a> FileScopedNameResolver<'a> {
         let scopes = self.workspace.get_scopes(self.project_link);
         let scope = self.scope_id;
 
-        let (name_for_search, span) = match parsed_type {
+        let (name_for_search, _span) = match parsed_type {
             ParsedType::Data(Spanned(name_for_search, span)) => (*name_for_search, *span),
             ParsedType::Array(t) => {
                 return Ok(self.type_registery.borrow_mut().register_type(Type::Array {
@@ -135,10 +135,7 @@ impl<'a> FileScopedNameResolver<'a> {
                     .primitive_by_spur(name_for_search)
                     .map(|(ty, _)| ty)
                     .unwrap_or_else(|| {
-                        ty_reg.register_type(Type::Unknown(
-                            self.file_id,
-                            Spanned(name_for_search, span),
-                        ))
+                        ty_reg.register_type(Type::Error)
                     })
             })
     }

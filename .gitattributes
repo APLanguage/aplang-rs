@@ -3,3 +3,5 @@
 *.toml text=lf
 *.lock text=lf
 *.txt text=lf
+.gitattributes text=lf
+.gitignore text=lf

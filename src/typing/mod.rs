@@ -2,15 +2,12 @@ pub mod typedast;
 
 use std::num::NonZeroUsize;
 
-use chumsky::span::SimpleSpan;
-use lasso::Spur;
 use slotmap::new_key_type;
 use strum_macros::Display;
 
 use crate::{
-    parsing::{parsers::number::LiteralWidth, Spanned},
-    project::{FileId, StructLink},
-    source::DeclarationPath,
+    parsing::parsers::number::LiteralWidth,
+    project::StructLink,
 };
 
 new_key_type! { pub struct TypeId; }
@@ -24,6 +21,8 @@ pub enum OperationResult {
     },
 }
 
+
+
 #[derive(Debug, PartialEq, Clone, Eq , Hash )]
 pub enum Type {
     PrimitiveType(PrimitiveType),
@@ -32,18 +31,8 @@ pub enum Type {
         ty: TypeId,
         size: Option<NonZeroUsize>,
     },
-    Function {
-        parameters: Box<[TypeId]>,
-        retty: Option<TypeId>,
-    },
-    Trait(DeclarationPath),
-    Union(Box<[TypeId]>),
-    Intersection(Box<[TypeId]>),
-    InternalUnion(Box<[TypeId]>),
     Ref(TypeId),
-    OperationResult(OperationResult),
-    Unknown(FileId, Spanned<Spur>),
-    Error(FileId, SimpleSpan, &'static str),
+    Error,
     Unit,
     Nothing,
 }

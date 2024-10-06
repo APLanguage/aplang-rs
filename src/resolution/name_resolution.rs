@@ -1,3 +1,4 @@
+use core::panic;
 use std::collections::HashMap;
 
 use chumsky::span::SimpleSpan;
@@ -189,19 +190,20 @@ pub fn resolve_function_outline(
             .filter_map(|r| r.err())
             .chain(ret_ty.and_then(|r| r.err().to_owned()))
         {
-            let e = name_resolver
-                .type_registery
-                .borrow()
-                .get_as_unknown(e)
-                .unwrap()
-                .1
-                 .1;
-            match errors.get_mut(&func.file_id) {
-                Some(v) => v.push(e),
-                None => {
-                    errors.insert(func.file_id, vec![e]);
-                }
-            }
+//            let e = name_resolver
+//                .type_registery
+//                .borrow()
+//                .get_as_unknown(e)
+//                .unwrap()
+//                .1
+//                 .1;
+            panic!("??");
+//            match errors.get_mut(&func.file_id) {
+//                Some(v) => v.push(e),
+//                None => {
+//                    errors.insert(func.file_id, vec![e]);
+//                }
+//            }
         }
         to_update.insert(func_id, ResolvedFunctionOutline { parameters, ret_ty });
     }
@@ -232,19 +234,20 @@ pub fn resolve_variable_outline(
         let Variable { ty, .. } = &var.decl.ast;
         let ty = ty.as_ref().map(|ty| resolve_singular(ty, &name_resolver));
         if let Some(e) = ty.and_then(|r| r.err().to_owned()) {
-            let e = name_resolver
-                .type_registery
-                .borrow()
-                .get_as_unknown(e)
-                .unwrap()
-                .1
-                 .1;
-            match errors.get_mut(&var.file_id) {
-                Some(v) => v.push(e),
-                None => {
-                    errors.insert(var.file_id, vec![e]);
-                }
-            }
+//            let e = name_resolver
+//                .type_registery
+//                .borrow()
+//                .get_as_unknown(e)
+//                .unwrap()
+//                .1
+//                 .1;
+            panic!("??");
+//            match errors.get_mut(&var.file_id) {
+//                Some(v) => v.push(e),
+//                None => {
+//                    errors.insert(var.file_id, vec![e]);
+//                }
+//            }
         }
         to_update.insert(var_id, ResolvedVariableOutline { ty });
     }
@@ -272,19 +275,20 @@ pub fn resolve_struct_outline(
         let (Struct { fields, .. }, _) = &strct.decl.ast;
         let fields = resolve_multiple(fields.iter().map(|field| &field.ty), &name_resolver);
         for e in fields.iter().filter_map(|r| r.err()) {
-            let e = name_resolver
-                .type_registery
-                .borrow()
-                .get_as_unknown(e)
-                .unwrap()
-                .1
-                 .1;
-            match errors.get_mut(&strct.file_id) {
-                Some(v) => v.push(e),
-                None => {
-                    errors.insert(strct.file_id, vec![e]);
-                }
-            }
+//            let e = name_resolver
+//                .type_registery
+//                .borrow()
+//                .get_as_unknown(e)
+//                .unwrap()
+//                .1
+//                 .1;
+            panic!("??");
+//            match errors.get_mut(&strct.file_id) {
+//                Some(v) => v.push(e),
+//                None => {
+//                    errors.insert(strct.file_id, vec![e]);
+//                }
+//            }
         }
         to_update.insert(struct_id, ResolvedStructOutline { fields });
     }

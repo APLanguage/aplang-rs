@@ -159,7 +159,7 @@ where EP: TokenParser<'a, I, Expression> + Clone + 'a {
     choice((
         just(Token::Number)
             .map_with_state(|_, span: SimpleSpan, input: &mut ParserState<'a>| {
-                parse_complex_number(input.rodeo, input.slice(span.into()).unwrap())
+                parse_complex_number(input.slice(span.into()).unwrap())
             })
             .map(Expression::Number)
             .boxed(),

@@ -140,13 +140,6 @@ impl TypeRegistry {
         self.types.get(type_id)
     }
 
-    pub fn get_as_unknown(&self, type_id: TypeId) -> Option<(FileId, Spanned<Spur>)> {
-        self.types.get(type_id).and_then(|t| match t {
-            Type::Unknown(f, s) => Some((*f, *s)),
-            _ => None,
-        })
-    }
-
     pub fn get_as_primitive(&self, type_id: TypeId) -> Option<PrimitiveType> {
         self.types.get(type_id).and_then(|t| match t {
             Type::PrimitiveType(t) => Some(*t),
@@ -185,19 +178,9 @@ impl TypeRegistry {
                         .join("::");
                     format!("({project_name}) {struct_path}")
                 }
+                Type::Error => format!("!<err [{:?}]>!", type_id),
                 Type::Array { ty: _, size: _ } => todo!("Type::Array"),
-                Type::Function {
-                    parameters: _,
-                    retty: _,
-                } => todo!("Type::Function"),
-                Type::Trait(_) => todo!("Type::Trait"),
-                Type::Union(_) => todo!("Type::Union"),
-                Type::Intersection(_) => todo!("Type::Intersection"),
-                Type::InternalUnion(_) => todo!("Type::InternalUnion"),
                 Type::Ref(_) => todo!("Type::Ref"),
-                Type::OperationResult(_) => todo!("Type::OperationResult"),
-                Type::Unknown(_, _) => todo!("Type::Unknown"),
-                Type::Error(_, _, e) => "!<".to_owned() + e + ">!" + &format!("[{:?}]", type_id),
                 Type::Unit => todo!("Type::Unit"),
                 Type::Nothing => todo!("Type::Nothing"),
             },
@@ -221,7 +204,7 @@ impl TypeRegistry {
     pub fn is_error(&self, ty: TypeId) -> bool {
         self.types
             .get(ty)
-            .map(|t| matches!(t, Type::Error(_, _, _)))
+            .map(|t| matches!(t, Type::Error))
             .unwrap_or(false)
     }
 }

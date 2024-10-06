@@ -294,11 +294,7 @@ impl<'a> ResolutionEnv<'a> {
                     self.resolver
                         .type_registery
                         .borrow_mut()
-                        .register_type(Type::Error(
-                            self.func_info.file_id,
-                            last_span,
-                            "not a struct",
-                        )),
+                        .register_type(Type::Error),
                     fir::Expression::CallChain {
                         expression: Box::new(base),
                         calls: the_calls.into_boxed_slice(),
@@ -326,11 +322,7 @@ impl<'a> ResolutionEnv<'a> {
                     self.resolver
                         .type_registery
                         .borrow_mut()
-                        .register_type(Type::Error(
-                            self.func_info.file_id,
-                            *span,
-                            "field not found",
-                        )),
+                        .register_type(Type::Error),
                     fir::Expression::CallChain {
                         expression: Box::new(base),
                         calls: the_calls.into_boxed_slice(),
@@ -412,11 +404,7 @@ impl<'a> ResolutionEnv<'a> {
                         self.resolver
                             .type_registery
                             .borrow_mut()
-                            .register_type(Type::Error(
-                                self.func_info.file_id,
-                                span,
-                                "unresolved variable",
-                            )),
+                            .register_type(Type::Error),
                         fir::Expression::Call(Spanned(fir::CallKind::Unresolved, span)),
                     )
                 }
@@ -451,11 +439,7 @@ impl<'a> ResolutionEnv<'a> {
                         self.resolver
                             .type_registery
                             .borrow_mut()
-                            .register_type(Type::Error(
-                                self.func_info.file_id,
-                                span,
-                                "unresolved function",
-                            )),
+                            .register_type(Type::Error),
                         fir::Expression::Call(Spanned(fir::CallKind::Unresolved, span)),
                     );
                 };
@@ -490,11 +474,7 @@ impl<'a> ResolutionEnv<'a> {
             Ok(lit) => self.resolve_number_literal_ok(try_to_be, lit, span),
             Err(e) => (
                 try_to_be.unwrap_or_else(|| {
-                    self.resolve_type(Type::Error(
-                        self.func_info.file_id,
-                        span,
-                        "error resolving broken number literal",
-                    ))
+                    self.resolve_type(Type::Error)
                 }),
                 fir::Expression::Number(Err(e.clone())),
             ),
@@ -585,7 +565,7 @@ impl<'a> ResolutionEnv<'a> {
                         })
                 }
             };
-        }
+        };
         Either::Left(match try_to_be {
             PrimitiveType::Integer(s, w) => {
                 let (p_i, p_w) = if s {
@@ -808,7 +788,7 @@ impl<'a> ResolutionEnv<'a> {
         if parameters.iter().any(|type_id| {
             matches!(
                 self.resolver.type_registery.borrow().get(*type_id),
-                Some(Type::Unknown(_, _) | Type::Error(_, _, _)) | None
+                Some(Type::Error) | None
             )
         }) {
             iter.take(0)
@@ -855,11 +835,7 @@ impl<'a> ResolutionEnv<'a> {
                     span,
                 );
                 try_to_be.unwrap_or_else(|| {
-                    self.resolver.register_type(Type::Error(
-                        self.func_info.file_id,
-                        span,
-                        "non primitive hands",
-                    ))
+                    self.resolver.register_type(Type::Error)
                 })
             }
             (_, _, (None, Some(_))) => {
@@ -874,11 +850,7 @@ impl<'a> ResolutionEnv<'a> {
                     span,
                 );
                 try_to_be.unwrap_or_else(|| {
-                    self.resolver.register_type(Type::Error(
-                        self.func_info.file_id,
-                        span,
-                        "non primitive lhs",
-                    ))
+                    self.resolver.register_type(Type::Error)
                 })
             }
             (_, _, (Some(ty), None)) => {
@@ -1075,11 +1047,7 @@ impl<'a> ResolutionEnv<'a> {
                 } else {
                     (
                         try_to_be.unwrap_or_else(|| {
-                            self.resolver.register_type(Type::Error(
-                                self.func_info.file_id,
-                                *call_span,
-                                "unresolved call chain",
-                            ))
+                            self.resolver.register_type(Type::Error)
                         }),
                         AssignableTarget::Unnassignable,
                         *call_span,
@@ -1101,11 +1069,7 @@ impl<'a> ResolutionEnv<'a> {
                     } = self.resolve_expression(try_to_be, expr, *expr_span);
                     (
                         try_to_be.unwrap_or_else(|| {
-                            self.resolver.register_type(Type::Error(
-                                self.func_info.file_id,
-                                *var_span,
-                                "variable not found",
-                            ))
+                            self.resolver.register_type(Type::Error)
                         }),
                         AssignableTarget::Unnassignable,
                         *call_span,
@@ -1120,11 +1084,7 @@ impl<'a> ResolutionEnv<'a> {
                 );
                 (
                     try_to_be.unwrap_or_else(|| {
-                        self.resolver.register_type(Type::Error(
-                            self.func_info.file_id,
-                            *call_span,
-                            "not assignable",
-                        ))
+                        self.resolver.register_type(Type::Error)
                     }),
                     AssignableTarget::Unnassignable,
                     *call_span,
@@ -1218,11 +1178,7 @@ impl<'a> ResolutionEnv<'a> {
                                 span,
                             );
                             Done(Infoed {
-                                info: self.resolver.register_type(Type::Error(
-                                    self.func_info.file_id,
-                                    span,
-                                    "Unary operation not applicable",
-                                )),
+                                info: self.resolver.register_type(Type::Error),
                                 span,
                                 inner: fir::Expression::Unary {
                                     op: *op,

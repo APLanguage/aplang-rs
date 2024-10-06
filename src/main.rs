@@ -304,7 +304,7 @@ fn main() {
                         let ty_str = workspace.display_type(&rodeo, ty).fg(ariadne::Color::Red);
                         let bool_ty_color = colors.next();
                         let bool_ty_str = "bool".fg(bool_ty_color);
-                        
+
                         rep
                             .with_message(format!("Expected condition of type `{bool_ty_str}` but got `{ty_str}`."))
                             .with_label(ariadne::Label::new((&input_name as &str, ty_span.into_range()))

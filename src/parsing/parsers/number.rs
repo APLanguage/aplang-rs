@@ -6,7 +6,6 @@ use std::{
 
 use bigdecimal::{num_bigint::ParseBigIntError, BigDecimal, ParseBigDecimalError};
 use either::Either;
-use lasso::Rodeo;
 use num::BigInt;
 use num_traits::{Num, PrimInt};
 use regex::Regex;
@@ -135,7 +134,7 @@ where T: PrimInt {
 
 static NUMBER_REGEX: OnceLock<Regex> = OnceLock::new();
 
-pub fn parse_complex_number(_rodeo: &mut Rodeo, input: &str) -> NumberLiteralResult {
+pub fn parse_complex_number(input: &str) -> NumberLiteralResult {
     let Some(captures) = NUMBER_REGEX
         .get_or_init(|| Regex::new(r"^(0x|0b|0o)?(\w+?(?:\.\w+?)*)?(?:([uif])(\d+))?$").unwrap())
         .captures(input)
@@ -230,5 +229,15 @@ pub fn parse_complex_number(_rodeo: &mut Rodeo, input: &str) -> NumberLiteralRes
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn simple_postive() {
+        assert_eq!(1, 1);
     }
 }
