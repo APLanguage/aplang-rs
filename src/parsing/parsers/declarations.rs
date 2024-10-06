@@ -1,6 +1,6 @@
 use crate::parsing::{
     ast::{
-        declarations::{Field, Function, Parameter, Struct, Variable},
+        declarations::{Field, Function, Parameter, Variable},
         ParsedType,
     },
     parsers::{expressions::expression_parser, TokenInput, TokenParser},
@@ -36,34 +36,6 @@ fn field_parser<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, Field> {
         ty,
     })
     .boxed()
-}
-
-pub fn struct_parser<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, Struct> {
-    keyword(Identifier::Struct)
-        .ignore_then(
-            ident()
-                .spur()
-                .spanned()
-                .paddedln()
-                .labelled("data-identifier")
-                .boxed(),
-        )
-        .then(
-            field_parser()
-                .paddedln()
-                .separated_by(just(Token::Comma))
-                .allow_trailing()
-                .collect_boxed_slice()
-                .boxed()
-                .delimited_by(just(Token::BraceOpen), just(Token::BraceClosed))
-                .labelled("data-fields")
-                .or_not()
-                .map(|f| f.unwrap_or_else(|| Box::new([])))
-                .boxed(),
-        )
-        .map(|(name, fields)| Struct { name, fields })
-        .labelled("data")
-        .boxed()
 }
 
 pub fn type_parser<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, ParsedType> {

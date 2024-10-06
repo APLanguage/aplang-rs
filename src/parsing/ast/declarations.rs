@@ -85,12 +85,6 @@ pub struct Parameter {
 }
 
 #[derive(Debug)]
-pub struct Struct {
-    pub name: Spanned<Spur>,
-    pub fields: Box<[Field]>,
-}
-
-#[derive(Debug)]
 pub struct Function {
     pub name: Spanned<Spur>,
     pub parameters: Box<[Parameter]>,
@@ -110,5 +104,4 @@ pub struct Variable {
 pub enum Declaration {
     Variable(Variable),
     Function(Function),
-    Struct(Struct),
 }

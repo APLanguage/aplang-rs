@@ -2,8 +2,6 @@ use std::ops::Range;
 
 use logos::Source;
 
-use crate::{project::{DeclarationId, DependencyId}, parsing::Infoable};
-
 pub trait SourceFile {
     fn read_range(&self, range: Range<usize>) -> Option<&str>;
     fn whole_file(&self) -> &str;
@@ -48,14 +46,3 @@ impl <'a> SourceFile for RefVirtualFile<'a> {
         self.source
     }
 }
-
-#[derive(PartialEq, Eq, PartialOrd, Ord, Copy, Clone, Debug, Hash)]
-pub struct DeclarationPath {
-    pub module_id: DependencyId,
-    pub declaration_id: DeclarationId,
-}
-
-impl Infoable for DeclarationPath {
-    type Info = (); // TODO: DeclarationPath Info
-}
-

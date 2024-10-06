@@ -12,7 +12,7 @@ use itertools::Itertools;
 use crate::parsing::{
     ast::declarations::{Declaration, UseDeclaration, UsePath, UsePathEnd},
     parsers::{
-        declarations::{function_parser, struct_parser, variable_parser},
+        declarations::{function_parser, variable_parser},
         CollectBoxedSliceExt, TokenInput, TokenParser, TokenParserExt,
     },
     tokenizer::{ident, keyword, newline, Identifier, Token},
@@ -22,7 +22,6 @@ pub type File = (Box<[UseDeclaration]>, Box<[Declaration]>);
 
 pub fn file_parser<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, File> {
     choice((
-        struct_parser().map(Declaration::Struct).map(Either::Right),
         variable_parser()
             .map(Declaration::Variable)
             .map(Either::Right),

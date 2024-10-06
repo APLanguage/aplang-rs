@@ -1,18 +1,13 @@
-pub mod typedast;
-
 use std::num::NonZeroUsize;
 
 use slotmap::new_key_type;
 use strum_macros::Display;
 
-use crate::{
-    parsing::parsers::number::LiteralWidth,
-    project::StructLink,
-};
+use crate::parsing::parsers::number::LiteralWidth;
 
 new_key_type! { pub struct TypeId; }
 
-#[derive(Debug, PartialEq, Clone, Eq , Hash  )]
+#[derive(Debug, PartialEq, Clone, Eq, Hash)]
 pub enum OperationResult {
     If {
         condition: TypeId,
@@ -21,20 +16,15 @@ pub enum OperationResult {
     },
 }
 
-
-
-#[derive(Debug, PartialEq, Clone, Eq , Hash )]
+#[derive(Debug, PartialEq, Clone, Eq, Hash)]
 pub enum Type {
     PrimitiveType(PrimitiveType),
-    Data(StructLink),
     Array {
         ty: TypeId,
         size: Option<NonZeroUsize>,
     },
     Ref(TypeId),
     Error,
-    Unit,
-    Nothing,
 }
 
 #[derive(Clone, Debug, PartialEq, Copy, Eq, Hash, PartialOrd, Ord)]
@@ -115,7 +105,7 @@ impl From<LiteralWidth> for FloatWidth {
             LiteralWidth::Inferred => _64,
             LiteralWidth::_32 => _32,
             LiteralWidth::_64 => _64,
-            _ => panic!("shouldn't happen that the width of floats is 8 or 16.")
+            _ => panic!("shouldn't happen that the width of floats is 8 or 16."),
         }
     }
 }
@@ -127,4 +117,5 @@ pub enum PrimitiveType {
     Float(FloatWidth),
     Boolean,
     Unit,
+    Nothing,
 }
