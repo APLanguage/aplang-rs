@@ -1,5 +1,6 @@
+
 use std::{
-    num::{ParseFloatError, ParseIntError},
+    num::{NonZeroU16, ParseFloatError, ParseIntError},
     str::FromStr,
     sync::OnceLock,
 };
@@ -10,7 +11,8 @@ use num::BigInt;
 use num_traits::{Num, PrimInt};
 use regex::Regex;
 
-use crate::typing::{FloatWidth, IntegerWidth};
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Copy)]
+pub struct LiteralWidth(NonZeroU16);
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum LiteralWidthError {
@@ -26,19 +28,8 @@ pub enum NumberLiteral {
     Float(f64, LiteralWidth),
     Inferred(Either<BigInt, BigDecimal>),
 }
-impl NumberLiteral {
-    fn inferred_of_u64(input: u64) -> NumberLiteral {
-        NumberLiteral::Unsigned(input, LiteralWidth::Inferred)
-    }
-    fn inferred_of_i64(input: i64) -> NumberLiteral {
-        NumberLiteral::Signed(input, LiteralWidth::Inferred)
-    }
-    fn inferred_of_f64(input: f64) -> NumberLiteral {
-        NumberLiteral::Float(input, LiteralWidth::Inferred)
-    }
-}
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub enum LiteralType {
     Unsigned,
     Signed,
@@ -46,69 +37,11 @@ pub enum LiteralType {
 }
 
 impl LiteralType {
-    fn width_error(&self) -> fn(LiteralWidthError) -> NumberLiteralError {
-        match self {
-            LiteralType::Signed => NumberLiteralError::SignedIntWidthError,
-            LiteralType::Unsigned => NumberLiteralError::UnsignedIntWidthError,
-            LiteralType::Float => NumberLiteralError::FloatWidthError,
-        }
+    fn width_error(self, we: LiteralWidthError) -> NumberLiteralError {
+        return NumberLiteralError::WidthError(self, we);
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
-#[repr(u8)]
-pub enum LiteralWidth {
-    Inferred = 0,
-    _8 = 8,
-    _16 = 16,
-    _32 = 32,
-    _64 = 64,
-}
-
-impl TryFrom<u8> for LiteralWidth {
-    type Error = LiteralWidthError;
-
-    fn try_from(value: u8) -> Result<Self, Self::Error> {
-        LiteralWidth::try_from(Into::<u64>::into(value))
-    }
-}
-
-impl TryFrom<u64> for LiteralWidth {
-    type Error = LiteralWidthError;
-
-    fn try_from(value: u64) -> Result<Self, Self::Error> {
-        Ok(match value {
-            0 => LiteralWidth::Inferred,
-            8 => LiteralWidth::_8,
-            16 => LiteralWidth::_16,
-            32 => LiteralWidth::_32,
-            64 => LiteralWidth::_64,
-            other => return Err(LiteralWidthError::NotSupported(other)),
-        })
-    }
-}
-
-impl From<IntegerWidth> for LiteralWidth {
-    fn from(value: IntegerWidth) -> Self {
-        match value {
-            IntegerWidth::_8 => LiteralWidth::_8,
-            IntegerWidth::_16 => LiteralWidth::_16,
-            IntegerWidth::_32 => LiteralWidth::_32,
-            IntegerWidth::_64 => LiteralWidth::_64,
-        }
-    }
-}
-
-impl From<FloatWidth> for LiteralWidth {
-    fn from(value: FloatWidth) -> Self {
-        match value {
-            FloatWidth::_32 => LiteralWidth::_32,
-            FloatWidth::_64 => LiteralWidth::_64,
-        }
-    }
-}
-
-pub type LiteralWidthResult = Result<LiteralWidth, LiteralWidthError>;
 pub type NumberLiteralResult = Result<NumberLiteral, NumberLiteralError>;
 
 #[derive(Debug, PartialEq, Clone)]
@@ -117,9 +50,7 @@ pub enum NumberLiteralError {
     ParseFloat(ParseFloatError, Option<(LiteralType, LiteralWidth)>),
     ParseBigInt(ParseBigIntError, Option<(LiteralType, LiteralWidth)>),
     ParseBigFloat(ParseBigDecimalError, Option<(LiteralType, LiteralWidth)>),
-    UnsignedIntWidthError(LiteralWidthError),
-    SignedIntWidthError(LiteralWidthError),
-    FloatWidthError(LiteralWidthError),
+    WidthError(LiteralType, LiteralWidthError),
     FloatHasRadix,
     CannotInfer,
     UnknownSuffix(String),
@@ -180,7 +111,7 @@ pub fn parse_complex_number(input: &str) -> NumberLiteralResult {
     if is_negative {
         number_part = "-".to_owned() + &number_part
     }
-    if num_type_width.is_none() {
+    let Some((num_type, width)) = num_type_width else {
         return if number_part.contains('.') {
             BigDecimal::from_str(&number_part)
                 .map(Either::Right)
@@ -192,23 +123,12 @@ pub fn parse_complex_number(input: &str) -> NumberLiteralResult {
         }
         .map(NumberLiteral::Inferred);
     };
-    let (num_type, width) = num_type_width.unwrap();
-    let width = LiteralWidth::try_from(width).map_err(num_type.width_error())?;
-    let width = match (num_type.clone(), width) {
-        (_, LiteralWidth::Inferred) => width,
-        (LiteralType::Signed | LiteralType::Unsigned, LiteralWidth::_8) => width,
-        (LiteralType::Signed | LiteralType::Unsigned, LiteralWidth::_16) => width,
-        (_, LiteralWidth::_32) => width,
-        (_, LiteralWidth::_64) => width,
-        (_, LiteralWidth::_8) => {
-            return Err((num_type.width_error())(LiteralWidthError::NotSupported(8)))
-        }
-        (_, LiteralWidth::_16) => {
-            return Err((num_type.width_error())(LiteralWidthError::NotSupported(
-                16,
-            )))
-        }
-    };
+    let width = match (num_type, TryInto::<u16>::try_into(width)) {
+        (t, Err(_)) => Err(NumberLiteralError::WidthError(t, LiteralWidthError::TooBigForLiteral(width))),
+        (LiteralType::Signed | LiteralType::Unsigned, Ok(w @ (8 | 16 | 32 | 64))) => Ok(LiteralWidth(NonZeroU16::try_from(w).expect("Must be 8, 16, 32 or 64"))),
+        (LiteralType::Float, Ok(w @ (32 | 64))) => Ok(LiteralWidth(NonZeroU16::try_from(w).expect("Must be 32 or 64"))),
+        (t, Ok(w)) => Err(t.width_error(LiteralWidthError::NotSupported(w as u64)))
+    }?;
     use LiteralType::*;
     match num_type {
         Unsigned => match parse_number(&number_part, radix) {

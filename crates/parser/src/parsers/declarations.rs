@@ -1,6 +1,6 @@
-use crate::parsing::{
+use crate::{
     ast::{
-        declarations::{Field, Function, Parameter, Variable},
+        declarations::{Function, Parameter, Variable},
         ParsedType,
     },
     parsers::{expressions::expression_parser, TokenInput, TokenParser},
@@ -13,30 +13,6 @@ use chumsky::{
 };
 
 use super::{statements::statement_parser, CollectBoxedSliceExt, TokenParserExt};
-
-fn field_parser<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, Field> {
-    group((
-        choice((
-            keyword(Identifier::Var).to(true),
-            keyword(Identifier::Val).to(false),
-        ))
-        .spanned(),
-        ident().spur().spanned(),
-        just(Token::Colon).paddedln(),
-        type_parser()
-            .spanned()
-            .paddedln()
-            .labelled("data-field-type")
-            .boxed(),
-    ))
-    .labelled("data-field")
-    .map(|(reassignable, name, _, ty)| Field {
-        reassignable,
-        name,
-        ty,
-    })
-    .boxed()
-}
 
 pub fn type_parser<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, ParsedType> {
     recursive(|p| {

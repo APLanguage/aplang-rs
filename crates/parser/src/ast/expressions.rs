@@ -1,7 +1,7 @@
 use lasso::Spur;
 use strum_macros::IntoStaticStr;
 
-use crate::parsing::{
+use crate::{
     parsers::number::NumberLiteralResult,
     tokenizer::{Operation, OperationGroup},
     Spanned,

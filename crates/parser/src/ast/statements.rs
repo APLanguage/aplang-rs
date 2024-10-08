@@ -1,6 +1,6 @@
 use strum_macros::IntoStaticStr;
 
-use crate::parsing::{
+use crate::{
     ast::expressions::Expression,
     Spanned,
 };

@@ -9,7 +9,7 @@ use chumsky::{
 use either::Either;
 use itertools::Itertools;
 
-use crate::parsing::{
+use crate::{
     ast::declarations::{Declaration, UseDeclaration, UsePath, UsePathEnd},
     parsers::{
         declarations::{function_parser, variable_parser},

@@ -1,6 +1,6 @@
 use chumsky::{prelude::just, primitive::choice, recursive::recursive, Parser};
 
-use crate::parsing::{
+use super::super::{
     ast::{
         declarations::Declaration,
         statements::{ControlFlow, Statement},

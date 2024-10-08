@@ -7,7 +7,7 @@ use chumsky::{
     Parser,
 };
 
-use crate::parsing::{
+use super::super::{
     ast::expressions::{CallKind, Expression},
     parsers::number::parse_complex_number,
     parsers::{CollectBoxedSliceExt, ParserState, TokenInput, TokenParser},
@@ -26,9 +26,7 @@ macro_rules! ops_parser {
     };
 }
 
-pub fn call<'a, EP, I: TokenInput<'a>>(
-    expr_parser: EP,
-) -> impl TokenParser<'a, I, CallKind>
+pub fn call<'a, EP, I: TokenInput<'a>>(expr_parser: EP) -> impl TokenParser<'a, I, CallKind>
 where EP: TokenParser<'a, I, Expression> + Clone + 'a {
     ident()
         .spur()
@@ -218,7 +216,7 @@ pub fn expression_parser<'a, I: TokenInput<'a>>() -> impl TokenParser<'a, I, Exp
 
 use paste::paste;
 
-use super::{string::string_parser, TokenParserExt, just_span};
+use super::{just_span, string::string_parser, TokenParserExt};
 macro_rules! binary_parser {
     ($what:ident, $name: ident, $next_name: ident, $ops:expr) => {
         paste! {

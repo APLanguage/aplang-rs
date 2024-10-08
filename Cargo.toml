@@ -1,12 +1,25 @@
-[package]
-name = "aplang"
+[workspace.package]
 version = "0.0.1"
 authors = ["Amejonah1200 <amejonah@gmail.com>"]
 edition = "2021"
 
+[workspace]
+resolver = "2"
+default-members = ["crates/cli"]
+members = [
+    "crates/cli",
+    "crates/parser",
+    "crates/source",
+    "crates/typing",
+]
+
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
-[dependencies]
+[workspace.dependencies]
+aplang-parser = { path = "crates/parser" }
+aplang-source = { path = "crates/source" }
+aplang-typing = { path = "crates/typing" }
+
 chumsky = { version = "1.0.0-alpha.7", features = [ "label" ] }
 walkdir = { git = "https://github.com/APLanguage/walkdir.git" }
 # chumsky = { version = "1.0.0-alpha.4", features = ["label"] }
@@ -36,8 +49,8 @@ tracing = "0.1"
 tracing-subscriber = {version = "0.3", features = ["default", "json"]}
 
 
-[target.'cfg(windows)'.dependencies.winapi-util]
-version = "0.1.9"
+#[target.'cfg(windows)'.dependencies]
+#winapi-util = { version = "0.1.9" }
 
 [profile.release]
 panic = "unwind"

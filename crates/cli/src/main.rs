@@ -5,29 +5,9 @@
 #![feature(iter_collect_into)]
 // #![feature(iter_map_windows)]
 
-use crate::parsing::parsers::{expressions::expression_parser, file::File};
-
-use chumsky::{error::RichReason, prelude::Rich, primitive::end, ParseResult, Parser};
-use itertools::Itertools;
-use lasso::Rodeo;
-use parsing::{
-    ast::{declarations::FlatUseDeclaration, expressions::Expression},
-    tokenizer::tokenize,
-};
-use source::VirtualFile;
-
-use crate::{
-    parsing::{
-        ast::declarations::UseDeclaration,
-        parsers::{file::file_parser, ParserState},
-        tokenizer::Token,
-    },
-    source::SourceFile,
-};
-
-pub mod parsing;
-pub mod source;
-pub mod typing;
+use aplang_parser::{ast::declarations::{FlatUseDeclaration, UseDeclaration}, tokenizer::Token};
+use aplang_source::{SourceFile, VirtualFile};
+use chumsky::{error::{Rich, RichReason}, ParseResult};
 
 #[derive(Debug)]
 enum PathPartType {
@@ -93,27 +73,9 @@ fn main() {
     // parse_and_print!(r###"r"Hello " + ", age " + str(person.age)"""###, test_parser)
 }
 
-fn parse_file<'a, S: SourceFile>(
-    rodeo: &'a mut Rodeo,
-    input: &'a S,
-) -> ParseResult<File, Rich<'a, Token>> {
-    let mut state = ParserState::new(rodeo, input);
-    return file_parser()
-        .then_ignore(end())
-        .parse_with_state(tokenize(input.whole_file()), &mut state);
-}
-
-fn parse_expression<'a, S: SourceFile>(
-    rodeo: &'a mut Rodeo,
-    input: &'a S,
-) -> ParseResult<Expression, Rich<'a, Token>> {
-    let mut state = ParserState::new(rodeo, input);
-    return expression_parser()
-        .then_ignore(end())
-        .parse_with_state(tokenize(input.whole_file()), &mut state);
-}
-
 fn print_uses(uses: &[UseDeclaration], file: &VirtualFile) {
+    use itertools::Itertools;
+
     uses.iter().flat_map(UseDeclaration::flatten_tree).for_each(
         |FlatUseDeclaration {
              path,

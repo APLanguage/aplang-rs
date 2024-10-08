@@ -6,7 +6,7 @@ use chumsky::{
 };
 use lasso::{Rodeo, Spur};
 
-use crate::source::SourceFile;
+use aplang_source::SourceFile;
 
 use super::{
     tokenizer::{newline, Token},

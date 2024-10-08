@@ -1,3 +1,5 @@
+#![feature(trait_alias)]
+
 use chumsky::span::SimpleSpan;
 
 pub mod ast;

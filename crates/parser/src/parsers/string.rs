@@ -8,7 +8,7 @@ use chumsky::{
 };
 use lasso::Rodeo;
 
-use crate::parsing::ast::expressions::StringLiteral;
+use crate::ast::expressions::StringLiteral;
 
 pub type CharParserExtra<'a> = Full<Cheap, (), ()>;
 pub trait CharInput<'a> = ValueInput<'a, Token = char, Span = SimpleSpan> + SliceInput<'a>;

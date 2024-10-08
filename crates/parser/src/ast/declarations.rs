@@ -1,9 +1,8 @@
 use std::iter::empty;
 
-use crate::parsing::{
+use crate::{
     ast::{expressions::Expression, statements::Statement},
     Spanned,
-    Infoed,
 };
 
 use super::ParsedType;
@@ -12,8 +11,6 @@ use itertools::Either;
 use lasso::Spur;
 use strum_macros::IntoStaticStr;
 use traversal::DftLongestPaths;
-
-type NameTypeTuple = (Spanned<Spur>, Infoed<ParsedType>);
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum UsePathEnd {

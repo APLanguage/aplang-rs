@@ -1,0 +1,22 @@
+[package]
+name = "aplang-parser"
+version.workspace = true
+edition.workspace = true
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+chumsky.workspace = true
+paste.workspace = true
+logos.workspace = true
+lasso.workspace = true
+strum_macros.workspace = true
+traversal.workspace = true
+itertools.workspace = true
+bigdecimal.workspace = true
+either.workspace = true
+num.workspace = true
+num-traits.workspace = true
+regex.workspace = true
+aplang-source.workspace = true
